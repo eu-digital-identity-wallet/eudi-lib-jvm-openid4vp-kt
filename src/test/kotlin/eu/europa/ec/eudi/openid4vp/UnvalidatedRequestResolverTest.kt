@@ -58,8 +58,16 @@ import java.security.KeyStore
 import java.security.cert.X509Certificate
 import java.time.Clock
 import java.util.*
+import kotlin.collections.List
+import kotlin.collections.emptyMap
+import kotlin.collections.first
+import kotlin.collections.forEach
+import kotlin.collections.indices
+import kotlin.collections.listOf
+import kotlin.collections.map
+import kotlin.collections.setOf
+import kotlin.collections.toMutableList
 import kotlin.test.*
-import kotlin.test.Test
 import kotlin.test.assertNotNull
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -127,7 +135,7 @@ class UnvalidatedRequestResolverTest {
         """.trimIndent(),
     ).jsonObject
 
-    private val walletConfig = SiopOpenId4VPConfig(
+    private val walletConfig = OpenId4VPConfig(
         supportedClientIdPrefixes = listOf(
             SupportedClientIdPrefix.Preregistered(
                 PreregisteredClient(
@@ -178,16 +186,6 @@ class UnvalidatedRequestResolverTest {
 
     private val clientMetadataJwksInline =
         """ {
-             "jwks": $jwkSetJO,              
-             "subject_syntax_types_supported": [ "urn:ietf:params:oauth:jwk-thumbprint", "did:example", "did:key" ],
-             "vp_formats_supported": $vpFormatsJO
-            } 
-        """.trimIndent().let {
-            URLEncoder.encode(it, "UTF-8")
-        }
-
-    private val clientMetadataJwksInlineNoSubjectSyntaxTypes =
-        """ {
              "jwks": $jwkSetJO,
              "vp_formats_supported": $vpFormatsJO
             } 
@@ -210,55 +208,10 @@ class UnvalidatedRequestResolverTest {
                     "&nonce=n-0S6_WzA2Mj" +
                     (state?.let { "&state=$it" } ?: "") +
                     "&dcql_query=$dcqlQuery" +
-                    "&client_metadata=$clientMetadataJwksInlineNoSubjectSyntaxTypes"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-            resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
-    fun `id token auth request`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=id_token" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&scope=openid" +
                     "&client_metadata=$clientMetadataJwksInline"
 
             val resolution = resolver().resolveRequestUri(authRequest)
-
-            resolution.validateSuccess<ResolvedRequestObject.SiopAuthentication>()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
-    fun `id and vp token auth request`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=vp_token%20id_token" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    "&scope=openid" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&dcql_query=$dcqlQuery" +
-                    "&client_metadata=$clientMetadataJwksInline"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            resolution.validateSuccess<ResolvedRequestObject.SiopOpenId4VPAuthentication>()
+            resolution.validateSuccess()
         }
 
         test(genState())
@@ -280,7 +233,7 @@ class UnvalidatedRequestResolverTest {
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
-            resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+            resolution.validateSuccess()
         }
 
         test(genState())
@@ -293,11 +246,6 @@ class UnvalidatedRequestResolverTest {
             val jwkSet = JWKSet(signingKey)
             val unvalidatedClientMetaData = UnvalidatedClientMetaData(
                 jwks = Json.parseToJsonElement(jwkSet.toPublicJWKSet().toString()).jsonObject,
-                subjectSyntaxTypesSupported = listOf(
-                    "urn:ietf:params:oauth:jwk-thumbprint",
-                    "did:example",
-                    "did:key",
-                ),
                 vpFormatsSupported = VpFormatsSupported(
                     msoMdoc =
                         VpFormatsSupported.MsoMdoc(
@@ -323,7 +271,7 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+            it.validateSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
@@ -348,11 +296,6 @@ class UnvalidatedRequestResolverTest {
                 "https://verifier.example.gr/wallet/direct_post",
                 UnvalidatedClientMetaData(
                     jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
-                    subjectSyntaxTypesSupported = listOf(
-                        "urn:ietf:params:oauth:jwk-thumbprint",
-                        "did:example",
-                        "did:key",
-                    ),
                     vpFormatsSupported = VpFormatsSupported(
                         msoMdoc =
                             VpFormatsSupported.MsoMdoc(
@@ -370,7 +313,7 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+            it.validateSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
@@ -397,11 +340,6 @@ class UnvalidatedRequestResolverTest {
                 "https://verifier.example.gr",
                 UnvalidatedClientMetaData(
                     jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
-                    subjectSyntaxTypesSupported = listOf(
-                        "urn:ietf:params:oauth:jwk-thumbprint",
-                        "did:example",
-                        "did:key",
-                    ),
                     vpFormatsSupported = VpFormatsSupported(
                         msoMdoc =
                             VpFormatsSupported.MsoMdoc(
@@ -419,7 +357,7 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+            it.validateSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
@@ -513,7 +451,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        with(resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()) {
+        with(resolution.validateSuccess()) {
             with(assertNotNull(vpFormatsSupported)) {
                 assertNotNull(sdJwtVc)
                 assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.sdJwtAlgorithms)
@@ -534,7 +472,7 @@ class UnvalidatedRequestResolverTest {
                 "&dcql_query=$dcqlQuery"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+        val request = resolution.validateSuccess()
 
         assertNull(request.vpFormatsSupported)
     }
@@ -565,7 +503,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+        val request = resolution.validateSuccess()
         val formats = request.vpFormatsSupported
         val sdJwtFormat = assertNotNull(formats?.sdJwtVc)
 
@@ -614,7 +552,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+        val request = resolution.validateSuccess()
         val formats = request.vpFormatsSupported
         assertNull(formats?.sdJwtVc)
         val msoMdocFormat = assertNotNull(formats?.msoMdoc)
@@ -701,32 +639,11 @@ class UnvalidatedRequestResolverTest {
     }
 
     @Test
-    fun `response type provided comma separated`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=id_token,vp_token" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&client_metadata=$clientMetadataJwksInline"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            resolution.validateInvalid<RequestValidationError.UnsupportedResponseType>()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
     fun `response type provided is miss-spelled`() = runTest {
         suspend fun test(state: String? = null) {
             val authRequest =
                 "https://client.example.org/universal-link?" +
-                    "response_type=id_tokens" +
+                    "response_type=vp_tokens" +
                     "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                     "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                     "&nonce=n-0S6_WzA2Mj" +
@@ -747,7 +664,7 @@ class UnvalidatedRequestResolverTest {
         suspend fun test(state: String? = null) {
             val authRequest =
                 "https://client.example.org/universal-link?" +
-                    "response_type=id_token" +
+                    "response_type=vp_token" +
                     "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                     (state?.let { "&state=$it" } ?: "") +
                     "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
@@ -767,7 +684,7 @@ class UnvalidatedRequestResolverTest {
         suspend fun test(state: String? = null) {
             val authRequest =
                 "https://client.example.org/universal-link?" +
-                    "response_type=id_token" +
+                    "response_type=vp_token" +
                     "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                     "&nonce=n-0S6_WzA2Mj" +
                     (state?.let { "&state=$it" } ?: "") +
@@ -800,9 +717,9 @@ class UnvalidatedRequestResolverTest {
     private fun load(f: String): InputStream =
         UnvalidatedRequestResolverTest::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
 
-    private inline fun <reified T : ResolvedRequestObject> Resolution.validateSuccess(): T =
+    private fun Resolution.validateSuccess(): ResolvedRequestObject =
         when (this) {
-            is Resolution.Success -> assertIs(requestObject, "${T::class} data expected")
+            is Resolution.Success -> requestObject
             is Resolution.Invalid -> fail("Invalid resolution found while expected success\n$error")
         }
 
@@ -1074,7 +991,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm.SHA_256),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+                val request = it.validateSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)
@@ -1097,7 +1014,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm.SHA_256),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+                val request = it.validateSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)
@@ -1120,7 +1037,7 @@ class UnvalidatedRequestResolverTest {
                     listOf(QueryId("my_credential")),
                 )
                 testAndThen(transactionData.json, queryWithSingleCredential) {
-                    val request = it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+                    val request = it.validateSuccess()
                     val resolvedTransactionData = run {
                         val resolvedTransactionData = assertNotNull(request.transactionData)
                         assertEquals(1, resolvedTransactionData.size)
@@ -1143,7 +1060,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm("sha-384")),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess<ResolvedRequestObject.OpenId4VPAuthorization>()
+                val request = it.validateSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)

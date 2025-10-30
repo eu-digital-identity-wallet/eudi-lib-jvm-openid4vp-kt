@@ -16,6 +16,9 @@
 package eu.europa.ec.eudi.openid4vp
 
 import eu.europa.ec.eudi.openid4vp.Client.*
+import eu.europa.ec.eudi.openid4vp.TransactionData.Companion.credentialIds
+import eu.europa.ec.eudi.openid4vp.TransactionData.Companion.type
+import eu.europa.ec.eudi.openid4vp.TransactionData.SdJwtVc.Companion.hashAlgorithms
 import eu.europa.ec.eudi.openid4vp.dcql.CredentialQueryIds
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.dcql.QueryId
@@ -249,78 +252,24 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
 }
 
 /**
- * Represents an OAUTH2 authorization request. In particular
- * either a [SIOPv2 for id_token][SiopOpenId4VPAuthentication] or
- * a [OpenId4VP for vp_token][OpenId4VPAuthorization] or
- * a [SIOPv2 combined with OpenID4VP][SiopOpenId4VPAuthentication]
+ * Represents an OAuth 2.0 authorization request for presenting a **vp_token**.
+ *
+ * @property responseEncryptionSpecification The verifier's requirements, if any, for encrypting the authorization response
+ * @property vpFormatsSupported Populated when client metadata are provided along with the request. It contains the formats
+ *   that both wallet and requester support. It is calculated by comparing wallet's configuration
+ *   (@see [OpenId4VPConfig].vpConfiguration)and the formats passed in request's client metadata.
  */
-sealed interface ResolvedRequestObject : java.io.Serializable {
-
-    val client: Client
-    val responseMode: ResponseMode
-    val state: String?
-    val nonce: String
-
-    /**
-     * The verifier's requirements, if any, for encrypting  the authorization response.
-     */
-    val responseEncryptionSpecification: ResponseEncryptionSpecification?
-
-    /**
-     * SIOPv2 Authentication request for issuing an id_token
-     */
-    data class SiopAuthentication(
-        override val client: Client,
-        override val responseMode: ResponseMode,
-        override val state: String?,
-        override val nonce: String,
-        override val responseEncryptionSpecification: ResponseEncryptionSpecification?,
-        val idTokenType: List<IdTokenType>,
-        val subjectSyntaxTypesSupported: List<SubjectSyntaxType>,
-        val scope: Scope,
-    ) : ResolvedRequestObject
-
-    /**
-     * OpenId4VP Authorization request for presenting a vp_token
-     *
-     * @param vpFormatsSupported Populated when client metadata are provided along with the request. It contains the formats
-     *   that both wallet and requester support. It is calculated by comparing wallet's configuration
-     *   (@see [SiopOpenId4VPConfig].vpConfiguration)and the formats passed in request's client metadata.
-     */
-    data class OpenId4VPAuthorization(
-        override val client: Client,
-        override val responseMode: ResponseMode,
-        override val state: String?,
-        override val nonce: String,
-        override val responseEncryptionSpecification: ResponseEncryptionSpecification?,
-        val vpFormatsSupported: VpFormatsSupported?,
-        val query: DCQL,
-        val transactionData: List<TransactionData>?,
-        val verifierInfo: VerifierInfo?,
-    ) : ResolvedRequestObject
-
-    /**
-     * OpenId4VP combined with SIOPv2 request for presenting an id_token & vp_token
-     *
-     * @param vpFormatsSupported Populated when client metadata are provided along with the request. It contains the formats
-     *   that both wallet and requester support. It is calculated by comparing wallet's configuration
-     *   (@see [SiopOpenId4VPConfig].vpConfiguration) and the formats passed in request's client metadata.
-     */
-    data class SiopOpenId4VPAuthentication(
-        override val client: Client,
-        override val responseMode: ResponseMode,
-        override val state: String?,
-        override val nonce: String,
-        override val responseEncryptionSpecification: ResponseEncryptionSpecification?,
-        val vpFormatsSupported: VpFormatsSupported?,
-        val idTokenType: List<IdTokenType>,
-        val subjectSyntaxTypesSupported: List<SubjectSyntaxType>,
-        val scope: Scope,
-        val query: DCQL,
-        val transactionData: List<TransactionData>?,
-        val verifierInfo: VerifierInfo?,
-    ) : ResolvedRequestObject
-}
+data class ResolvedRequestObject(
+    val client: Client,
+    val responseMode: ResponseMode,
+    val state: String?,
+    val nonce: String,
+    val responseEncryptionSpecification: ResponseEncryptionSpecification?,
+    val vpFormatsSupported: VpFormatsSupported?,
+    val query: DCQL,
+    val transactionData: List<TransactionData>?,
+    val verifierInfo: VerifierInfo?,
+) : java.io.Serializable
 
 /**
  * Errors that can occur while validating and resolving an authorization request
@@ -441,19 +390,9 @@ sealed interface RequestValidationError : AuthorizationRequestError {
 
     data class InvalidClientMetaData(val cause: String) : RequestValidationError
 
-    data object SubjectSyntaxTypesNoMatch : RequestValidationError {
-        @Suppress("unused")
-        private fun readResolve(): Any = SubjectSyntaxTypesNoMatch
-    }
-
     data object MissingClientMetadataJwks : RequestValidationError {
         @Suppress("unused")
         private fun readResolve(): Any = MissingClientMetadataJwks
-    }
-
-    data object SubjectSyntaxTypesWrongSyntax : RequestValidationError {
-        @Suppress("unused")
-        private fun readResolve(): Any = SubjectSyntaxTypesWrongSyntax
     }
 
     data object IdTokenSigningAlgMissing : RequestValidationError {

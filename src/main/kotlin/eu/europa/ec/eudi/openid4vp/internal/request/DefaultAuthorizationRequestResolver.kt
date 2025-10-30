@@ -63,9 +63,7 @@ internal value class TransactionDataTO(val value: JsonArray) {
 }
 
 /**
- * The data of an OpenID4VP authorization request or SIOP Authentication request
- * or a combined OpenId4VP & SIOP request
- * without any validation and regardless of the way they sent to the wallet
+ * The data of an OpenID4VP authorization request without any validation and regardless of the way they sent to the wallet.
  */
 @Serializable
 internal data class UnvalidatedRequestObject(
@@ -79,7 +77,6 @@ internal data class UnvalidatedRequestObject(
     @SerialName("redirect_uri") val redirectUri: String? = null,
     @SerialName("scope") val scope: String? = null,
     @SerialName("state") val state: String? = null,
-    @SerialName("id_token_type") val idTokenType: String? = null,
     @SerialName(OpenId4VPSpec.TRANSACTION_DATA) val transactionData: TransactionDataTO? = null,
     @SerialName(OpenId4VPSpec.VERIFIER_INFO) val verifierInfo: VerifierInfoTO? = null,
 )
@@ -220,7 +217,7 @@ internal fun ReceivedRequest.Signed.toSignedJwts(): List<SignedJWT> =
     }
 
 internal class DefaultAuthorizationRequestResolver(
-    private val siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    private val openId4VPConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) : AuthorizationRequestResolver {
 
@@ -242,8 +239,8 @@ internal class DefaultAuthorizationRequestResolver(
                 authenticateRequest(fetchedRequest)
             } catch (e: AuthorizationRequestException) {
                 val dispatchDetails =
-                    when (siopOpenId4VPConfig.errorDispatchPolicy) {
-                        ErrorDispatchPolicy.AllClients -> dispatchDetailsOrNull(fetchedRequest, siopOpenId4VPConfig)
+                    when (openId4VPConfig.errorDispatchPolicy) {
+                        ErrorDispatchPolicy.AllClients -> dispatchDetailsOrNull(fetchedRequest, openId4VPConfig)
                         ErrorDispatchPolicy.OnlyAuthenticatedClients -> null
                     }
                 return Resolution.Invalid(e.error, dispatchDetails)
@@ -253,7 +250,7 @@ internal class DefaultAuthorizationRequestResolver(
             try {
                 validateRequestObject(authenticatedRequest)
             } catch (e: AuthorizationRequestException) {
-                val dispatchDetails = dispatchDetailsOrNull(authenticatedRequest.requestObject, siopOpenId4VPConfig)
+                val dispatchDetails = dispatchDetailsOrNull(authenticatedRequest.requestObject, openId4VPConfig)
                 return Resolution.Invalid(e.error, dispatchDetails)
             }
 
@@ -261,18 +258,18 @@ internal class DefaultAuthorizationRequestResolver(
     }
 
     private fun validateRequestObject(authenticatedRequest: AuthenticatedRequest): ResolvedRequestObject {
-        val requestValidator = RequestObjectValidator(siopOpenId4VPConfig)
+        val requestValidator = RequestObjectValidator(openId4VPConfig)
         return requestValidator.validateRequestObject(authenticatedRequest)
     }
 
     private suspend fun HttpClient.fetchRequest(uri: String): ReceivedRequest {
         val unvalidatedRequest = UnvalidatedRequest.make(uri).getOrThrow()
-        val requestFetcher = RequestFetcher(this, siopOpenId4VPConfig)
+        val requestFetcher = RequestFetcher(this, openId4VPConfig)
         return requestFetcher.fetchRequest(unvalidatedRequest)
     }
 
     private suspend fun HttpClient.authenticateRequest(receivedRequest: ReceivedRequest): AuthenticatedRequest {
-        val requestAuthenticator = RequestAuthenticator(siopOpenId4VPConfig, this)
+        val requestAuthenticator = RequestAuthenticator(openId4VPConfig, this)
         return requestAuthenticator.authenticate(receivedRequest)
     }
 }
@@ -282,11 +279,11 @@ internal class DefaultAuthorizationRequestResolver(
  */
 private fun dispatchDetailsOrNull(
     fetchedRequest: ReceivedRequest,
-    siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? =
     when (fetchedRequest) {
-        is ReceivedRequest.Signed -> dispatchDetailsOrNull(fetchedRequest.jwsJson, siopOpenId4VPConfig)
-        is ReceivedRequest.Unsigned -> dispatchDetailsOrNull(fetchedRequest.requestObject, siopOpenId4VPConfig)
+        is ReceivedRequest.Signed -> dispatchDetailsOrNull(fetchedRequest.jwsJson, openId4VPConfig)
+        is ReceivedRequest.Unsigned -> dispatchDetailsOrNull(fetchedRequest.requestObject, openId4VPConfig)
     }
 
 /**
@@ -300,11 +297,11 @@ private fun dispatchDetailsOrNull(
  */
 private fun dispatchDetailsOrNull(
     unvalidatedRequest: UnvalidatedRequestObject,
-    siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? {
     return unvalidatedRequest.responseMode()?.let { responseMode ->
         val responseEncryptionSpecification =
-            unvalidatedRequest.responseEncryptionSpecification(siopOpenId4VPConfig, responseMode)
+            unvalidatedRequest.responseEncryptionSpecification(openId4VPConfig, responseMode)
         ErrorDispatchDetails(
             responseMode = responseMode,
             nonce = unvalidatedRequest.nonce,
@@ -316,7 +313,7 @@ private fun dispatchDetailsOrNull(
 }
 
 private fun UnvalidatedRequestObject.responseEncryptionSpecification(
-    siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    openId4VPConfig: OpenId4VPConfig,
     responseMode: ResponseMode,
 ): Result<ResponseEncryptionSpecification?> = runCatchingCancellable {
     clientMetaData?.let {
@@ -326,8 +323,8 @@ private fun UnvalidatedRequestObject.responseEncryptionSpecification(
                 it,
                 responseMode,
                 null,
-                siopOpenId4VPConfig.responseEncryptionConfiguration,
-                siopOpenId4VPConfig.vpConfiguration.vpFormatsSupported,
+                openId4VPConfig.responseEncryptionConfiguration,
+                openId4VPConfig.vpConfiguration.vpFormatsSupported,
             )
         }
         validatedClientMetadata.responseEncryptionSpecification
@@ -358,12 +355,12 @@ private fun UnvalidatedRequestObject.responseMode(): ResponseMode? {
 
 private fun dispatchDetailsOrNull(
     jwsJson: JwsJson,
-    siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? =
     runCatchingCancellable {
         dispatchDetailsOrNull(
             jwsJson.decodePayloadAs<UnvalidatedRequestObject>(),
-            siopOpenId4VPConfig,
+            openId4VPConfig,
         )
     }.getOrNull()
 

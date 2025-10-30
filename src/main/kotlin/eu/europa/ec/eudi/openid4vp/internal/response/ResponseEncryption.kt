@@ -84,7 +84,6 @@ private object JwtPayloadFactory {
 
     private const val VP_TOKEN_CLAIM = "vp_token"
     private const val STATE_CLAIM = "state"
-    private const val ID_TOKEN_CLAIM = "id_token"
     private const val ERROR_CLAIM = "error"
     private const val ERROR_DESCRIPTION_CLAIM = "error_description"
 
@@ -98,16 +97,7 @@ private object JwtPayloadFactory {
             put(STATE_CLAIM, it)
         }
         when (data) {
-            is AuthorizationResponsePayload.SiopAuthentication -> {
-                put(ID_TOKEN_CLAIM, data.idToken)
-            }
-
-            is AuthorizationResponsePayload.OpenId4VPAuthorization -> {
-                put(VP_TOKEN_CLAIM, data.verifiablePresentations.asJsonObject())
-            }
-
-            is AuthorizationResponsePayload.SiopOpenId4VPAuthentication -> {
-                put(ID_TOKEN_CLAIM, data.idToken)
+            is AuthorizationResponsePayload.Success -> {
                 put(VP_TOKEN_CLAIM, data.verifiablePresentations.asJsonObject())
             }
 

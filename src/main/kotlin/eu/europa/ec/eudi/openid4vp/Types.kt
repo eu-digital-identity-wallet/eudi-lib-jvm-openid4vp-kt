@@ -31,16 +31,6 @@ import kotlinx.serialization.json.JsonObject
 import java.net.URI
 import java.net.URL
 
-sealed interface SubjectSyntaxType : java.io.Serializable {
-
-    @JvmInline
-    value class DecentralizedIdentifier(val method: String) : SubjectSyntaxType
-
-    data object JWKThumbprint : SubjectSyntaxType {
-        private fun readResolve(): Any = JWKThumbprint
-    }
-}
-
 @JvmInline
 value class Scope private constructor(val value: String) {
     fun items(): List<Scope> = when (value) {
@@ -253,15 +243,6 @@ value class VerifiablePresentations(val value: Map<QueryId, List<VerifiablePrese
         require(value.isNotEmpty())
         require(value.values.all { it.isNotEmpty() })
     }
-}
-
-/**
- * The type of the `id_token`
- * the client (verifier party) requested
- */
-enum class IdTokenType {
-    SubjectSigned,
-    AttesterSigned,
 }
 
 /**

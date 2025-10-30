@@ -238,23 +238,23 @@ data class Transaction(
 }
 
 private class Wallet(
-    private val walletConfig: SiopOpenId4VPConfig,
+    private val walletConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) {
-    private val siopOpenId4Vp: SiopOpenId4Vp by lazy {
-        SiopOpenId4Vp(walletConfig, httpClient)
+    private val openId4Vp: OpenId4Vp by lazy {
+        OpenId4Vp(walletConfig, httpClient)
     }
 
     suspend fun handle(uri: URI): DispatchOutcome {
         walletPrintln("Handling $uri ...")
         return withContext(Dispatchers.IO) {
-            siopOpenId4Vp.handle(uri.toString()) { holderConsent(it) }.also {
+            openId4Vp.handle(uri.toString()) { holderConsent(it) }.also {
                 walletPrintln("Response was sent to verifierApi which replied with $it")
             }
         }
     }
 
-    suspend fun SiopOpenId4Vp.handle(
+    suspend fun OpenId4Vp.handle(
         uri: String,
         holderConsensus: suspend (ResolvedRequestObject) -> Consensus,
     ): DispatchOutcome =
@@ -267,31 +267,25 @@ private class Wallet(
             }
         }
 
-    suspend fun holderConsent(request: ResolvedRequestObject): Consensus = withContext(Dispatchers.Default) {
-        when (request) {
-            is ResolvedRequestObject.OpenId4VPAuthorization -> handleOpenId4VP(request)
-            else -> Consensus.NegativeConsensus
-        }
-    }
+    suspend fun holderConsent(request: ResolvedRequestObject): Consensus =
+        withContext(Dispatchers.Default) {
+            val query = request.query
+            check(1 == query.credentials.value.size) { "found more than 1 credentials" }
+            val credential = query.credentials.value.first()
+            val verifiablePresentation = when (val format = credential.format.value) {
+                "mso_mdoc" -> VerifiablePresentation.Generic(loadResource("/example/mso_mdoc_pid-deviceresponse.txt"))
+                "dc+sd-jwt" -> prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
+                else -> error("unsupported format $format")
+            }
 
-    private fun handleOpenId4VP(request: ResolvedRequestObject.OpenId4VPAuthorization): Consensus {
-        val query = request.query
-        check(1 == query.credentials.value.size) { "found more than 1 credentials" }
-        val credential = query.credentials.value.first()
-        val verifiablePresentation = when (val format = credential.format.value) {
-            "mso_mdoc" -> VerifiablePresentation.Generic(loadResource("/example/mso_mdoc_pid-deviceresponse.txt"))
-            "dc+sd-jwt" -> prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
-            else -> error("unsupported format $format")
-        }
-
-        return Consensus.PositiveConsensus.VPTokenConsensus(
-            verifiablePresentations = VerifiablePresentations(
-                value = mapOf(
-                    credential.id to listOf(verifiablePresentation),
+            Consensus.PositiveConsensus(
+                verifiablePresentations = VerifiablePresentations(
+                    value = mapOf(
+                        credential.id to listOf(verifiablePresentation),
+                    ),
                 ),
-            ),
-        )
-    }
+            )
+        }
 
     private fun prepareSdJwtVcVerifiablePresentation(
         audience: Client,
@@ -348,7 +342,7 @@ private val TrustAnyX509: (List<X509Certificate>) -> Boolean = { _ ->
 }
 
 private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix) =
-    SiopOpenId4VPConfig(
+    OpenId4VPConfig(
         vpConfiguration = VPConfiguration(
             vpFormatsSupported = VpFormatsSupported(
                 VpFormatsSupported.SdJwtVc.HAIP,

@@ -32,7 +32,6 @@ import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
 import eu.europa.ec.eudi.openid4vp.internal.request.asURI
 import eu.europa.ec.eudi.openid4vp.internal.request.asURL
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationRequestErrorCode.INVALID_REQUEST_URI_METHOD
-import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationRequestErrorCode.SUBJECT_SYNTAX_TYPES_NOT_SUPPORTED
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherTest.Verifier
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.http.*
@@ -60,7 +59,7 @@ import kotlin.test.assertNotNull
 class AuthorizationResponseDispatcherTest {
     private val json: Json by lazy { Json { ignoreUnknownKeys = true } }
 
-    private val walletConfig = SiopOpenId4VPConfig(
+    private val walletConfig = OpenId4VPConfig(
         supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
         vpConfiguration = VPConfiguration(
             vpFormatsSupported = VpFormatsSupported(
@@ -93,14 +92,6 @@ class AuthorizationResponseDispatcherTest {
                         }
                     ]
                 },
-                "id_token_encrypted_response_alg": "RS256",
-                "id_token_encrypted_response_enc": "A128CBC-HS256",
-                "subject_syntax_types_supported": [
-                    "urn:ietf:params:oauth:jwk-thumbprint",
-                    "did:example",
-                    "did:key"
-                ],
-                "id_token_signed_response_alg": "RS256",
                 "vp_formats_supported": {
                     "mso_mdoc": {
                         "issuerauth_alg_values": [-7, -9],
@@ -113,90 +104,6 @@ class AuthorizationResponseDispatcherTest {
     private val clientMetaData = json.decodeFromString<UnvalidatedClientMetaData>(clientMetadataStr)
     private fun genState(): String {
         return State().value
-    }
-
-    @Test
-    fun `dispatch direct post response`() = runTest {
-        fun test(state: String? = null) {
-            val responseMode = ResponseMode.DirectPost("https://respond.here".asURL().getOrThrow())
-            val validated = assertDoesNotThrow {
-                ClientMetaDataValidator.validateClientMetaData(
-                    clientMetaData,
-                    responseMode,
-                    null,
-                    walletConfig.responseEncryptionConfiguration,
-                    walletConfig.vpConfiguration.vpFormatsSupported,
-                )
-            }
-
-            val siopAuthRequestObject =
-                ResolvedRequestObject.SiopAuthentication(
-                    idTokenType = listOf(IdTokenType.AttesterSigned),
-                    subjectSyntaxTypesSupported = validated.subjectSyntaxTypesSupported,
-                    responseEncryptionSpecification = validated.responseEncryptionSpecification,
-                    client = Client.Preregistered("https%3A%2F%2Fclient.example.org%2Fcb", "Verifier"),
-                    nonce = "0S6_WzA2Mj",
-                    responseMode = responseMode,
-                    state = state,
-                    scope = Scope.make("openid") ?: throw IllegalStateException(),
-                )
-
-            val walletKeyPair = SiopIdTokenBuilder.randomKey()
-            val idToken = SiopIdTokenBuilder.build(
-                siopAuthRequestObject,
-                HolderInfo(
-                    email = "foo@bar.com",
-                    name = "Foo bar",
-                ),
-                walletKeyPair,
-            )
-
-            val idTokenConsensus = Consensus.PositiveConsensus.IdTokenConsensus(
-                idToken = idToken,
-            )
-
-            testApplication {
-                externalServices {
-                    hosts("https://respond.here") {
-                        install(io.ktor.server.plugins.contentnegotiation.ContentNegotiation) {
-                            json()
-                        }
-                        routing {
-                            post("/") {
-                                val formParameters = call.receiveParameters()
-                                val idTokenTxt = formParameters["id_token"].toString()
-                                val stateParam = formParameters["state"]
-
-                                assertEquals(
-                                    "application/x-www-form-urlencoded",
-                                    call.request.headers["Content-Type"],
-                                )
-                                assertEquals(state, stateParam)
-                                assertEquals(idToken, idTokenTxt)
-
-                                call.respond(buildJsonObject { put("redirect_uri", "https://foo") })
-                            }
-                        }
-                    }
-                }
-                val managedHttpClient = createClient {
-                    install(ContentNegotiation) {
-                        json()
-                    }
-                }
-
-                val dispatcher = DefaultDispatcher(managedHttpClient)
-                val outcome = dispatcher.dispatch(
-                    siopAuthRequestObject,
-                    idTokenConsensus,
-                    EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
-                )
-                assertIs<DispatchOutcome.VerifierResponse>(outcome)
-            }
-        }
-
-        test(genState())
-        test()
     }
 
     @Test
@@ -215,7 +122,7 @@ class AuthorizationResponseDispatcherTest {
             }
 
             val openId4VPAuthRequestObject =
-                ResolvedRequestObject.OpenId4VPAuthorization(
+                ResolvedRequestObject(
                     responseEncryptionSpecification = validated.responseEncryptionSpecification,
                     vpFormatsSupported = VpFormatsSupported(
                         msoMdoc = VpFormatsSupported.MsoMdoc(
@@ -232,7 +139,7 @@ class AuthorizationResponseDispatcherTest {
                     verifierInfo = null,
                 )
 
-            val vpTokenConsensus = Consensus.PositiveConsensus.VPTokenConsensus(
+            val vpTokenConsensus = Consensus.PositiveConsensus(
                 VerifiablePresentations(
                     mapOf(
                         QueryId("query_0") to listOf(VerifiablePresentation.Generic("vp_token")),
@@ -429,14 +336,14 @@ class AuthorizationResponseDispatcherTest {
 
                     val dispatcher = DefaultDispatcher(managedHttpClient)
                     val outcome = dispatcher.dispatchError(
-                        RequestValidationError.SubjectSyntaxTypesNoMatch,
+                        RequestValidationError.MissingResponseType,
                         errorDispatchDetails,
                         EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
                     )
                     assertIs<DispatchOutcome.RedirectURI>(outcome)
 
                     val urlParams = Url(outcome.value).parameters
-                    assertEquals(SUBJECT_SYNTAX_TYPES_NOT_SUPPORTED.code, urlParams["error"])
+                    assertEquals(AuthorizationRequestErrorCode.INVALID_REQUEST.code, urlParams["error"])
                     assertEquals(state, urlParams["state"])
                 }
             }

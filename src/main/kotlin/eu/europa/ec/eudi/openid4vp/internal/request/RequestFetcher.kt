@@ -40,7 +40,7 @@ import java.text.ParseException
 
 internal class RequestFetcher(
     private val httpClient: HttpClient,
-    private val siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    private val openId4VPConfig: OpenId4VPConfig,
 ) {
     /**
      * Fetches the authorization request, if needed
@@ -52,7 +52,7 @@ internal class RequestFetcher(
                 is UnvalidatedRequest.JwtSecured.PassByValue -> request.jwt to null
                 is UnvalidatedRequest.JwtSecured.PassByReference -> fetchJwtAndWalletNonce(request)
             }
-            with(siopOpenId4VPConfig) {
+            with(openId4VPConfig) {
                 ensureValid(expectedClient = request.clientId, expectedWalletNonce = walletNonce, unverifiedJwt = jwt)
             }
         }
@@ -64,7 +64,7 @@ internal class RequestFetcher(
         val (_, requestUri, requestUriMethod) = request
 
         val supportedMethods =
-            siopOpenId4VPConfig.jarConfiguration.supportedRequestUriMethods
+            openId4VPConfig.jarConfiguration.supportedRequestUriMethods
 
         return when (requestUriMethod) {
             null, RequestUriMethod.GET -> {
@@ -90,7 +90,7 @@ internal class RequestFetcher(
                 }
                 val walletMetaData =
                     if (postOptions.includeWalletMetadata) {
-                        walletMetaData(siopOpenId4VPConfig, listOfNotNull(ephemeralJarEncryptionKey))
+                        walletMetaData(openId4VPConfig, listOfNotNull(ephemeralJarEncryptionKey))
                     } else null
 
                 val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)
@@ -104,7 +104,7 @@ internal class RequestFetcher(
     }
 }
 
-private fun SiopOpenId4VPConfig.ensureValid(
+private fun OpenId4VPConfig.ensureValid(
     expectedClient: String,
     expectedWalletNonce: Nonce?,
     unverifiedJwt: Jwt,
@@ -131,7 +131,7 @@ private fun ensureSameWalletNonce(expectedWalletNonce: Nonce, signedJwt: SignedJ
     }
 }
 
-private fun SiopOpenId4VPConfig.ensureSupportedSigningAlgorithm(signedJwt: SignedJWT) {
+private fun OpenId4VPConfig.ensureSupportedSigningAlgorithm(signedJwt: SignedJWT) {
     val signingAlg = ensureNotNull(signedJwt.header.algorithm) {
         invalidJwt("JAR is missing alg claim from header")
     }

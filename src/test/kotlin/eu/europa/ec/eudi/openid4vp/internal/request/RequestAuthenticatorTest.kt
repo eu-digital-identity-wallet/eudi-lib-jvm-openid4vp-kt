@@ -29,7 +29,6 @@ import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
 import eu.europa.ec.eudi.openid4vp.internal.DID
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
@@ -47,7 +46,7 @@ class ClientAuthenticatorTest {
     @Nested
     inner class ClientAuthenticatorCommonTest {
 
-        private val cfg = SiopOpenId4VPConfig(
+        private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
@@ -89,7 +88,7 @@ class ClientAuthenticatorTest {
     @Nested
     inner class ClientAuthenticatorWhenUsingRedirectUriTest {
         private val clientId = URI.create("http://localhost:8080")
-        private val cfg = SiopOpenId4VPConfig(
+        private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
@@ -137,7 +136,7 @@ class ClientAuthenticatorTest {
         private val clientId = "decentralized_identifier:$originalClientId"
         private val keyUrl = AbsoluteDIDUrl.parse("$originalClientId#01").getOrThrow()
         private val algAndKey = randomKey()
-        private val cfg = SiopOpenId4VPConfig(
+        private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.DecentralizedIdentifier { url ->
                     assertEquals(keyUrl.uri, url)
@@ -251,7 +250,7 @@ class ClientAuthenticatorTest {
         private val clientId = "someClient"
         private val algAndKey = randomKey()
 
-        private val cfg = SiopOpenId4VPConfig(
+        private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.VerifierAttestation(AttestationIssuer.verifier),
             ),

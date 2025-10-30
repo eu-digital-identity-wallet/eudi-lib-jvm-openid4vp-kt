@@ -185,7 +185,6 @@ internal object DirectPostForm {
 
     private const val VP_TOKEN_FORM_PARAM = "vp_token"
     private const val STATE_FORM_PARAM = "state"
-    private const val ID_TOKEN_FORM_PARAM = "id_token"
     private const val ERROR_FORM_PARAM = "error"
     private const val ERROR_DESCRIPTION_FORM_PARAM = "error_description"
 
@@ -198,22 +197,7 @@ internal object DirectPostForm {
 
     fun of(p: AuthorizationResponsePayload): Map<String, String> =
         when (p) {
-            is AuthorizationResponsePayload.SiopAuthentication -> buildMap {
-                put(ID_TOKEN_FORM_PARAM, p.idToken)
-                p.state?.let {
-                    put(STATE_FORM_PARAM, it)
-                }
-            }
-
-            is AuthorizationResponsePayload.OpenId4VPAuthorization -> buildMap {
-                put(VP_TOKEN_FORM_PARAM, p.verifiablePresentations.asParam())
-                p.state?.let {
-                    put(STATE_FORM_PARAM, it)
-                }
-            }
-
-            is AuthorizationResponsePayload.SiopOpenId4VPAuthentication -> buildMap {
-                put(ID_TOKEN_FORM_PARAM, p.idToken)
+            is AuthorizationResponsePayload.Success -> buildMap {
                 put(VP_TOKEN_FORM_PARAM, p.verifiablePresentations.asParam())
                 p.state?.let {
                     put(STATE_FORM_PARAM, it)

@@ -24,7 +24,6 @@ import com.nimbusds.jose.jwk.JWKSet
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.*
 import kotlin.test.*
 
@@ -32,7 +31,7 @@ class WalletMetaDataTest {
 
     @Test
     fun `test with jar encryption`() = runTest {
-        val config = SiopOpenId4VPConfig(
+        val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
             vpConfiguration = VPConfiguration(
                 vpFormatsSupported = VpFormatsSupported(
@@ -59,7 +58,7 @@ class WalletMetaDataTest {
 
     @Test
     fun `test without jar encryption`() = runTest {
-        val config = SiopOpenId4VPConfig(
+        val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
             vpConfiguration = VPConfiguration(
                 vpFormatsSupported = VpFormatsSupported(
@@ -79,7 +78,7 @@ class WalletMetaDataTest {
     }
 }
 
-private suspend fun assertMetadata(config: SiopOpenId4VPConfig) {
+private suspend fun assertMetadata(config: OpenId4VPConfig) {
     val (encryptionRequirement, ephemeralJarEncryptionJwks) =
         config.jarConfiguration.supportedRequestUriMethods.isPostSupported()
             ?.let { requestUriMethodPost ->
@@ -214,8 +213,6 @@ private fun assertResponseTypes(walletMetadata: JsonObject) {
     assert(types.all { it is JsonPrimitive && it.isString }) { "'response_types_supported' does not contain strings only" }
 
     val values = types.map { it.jsonPrimitive.content }
-    assertEquals(3, values.size, "'unexpected number of 'response_types_supported'")
+    assertEquals(1, values.size, "'unexpected number of 'response_types_supported'")
     assert("vp_token" in values) { "'response_types_supported' misses 'vp_token'" }
-    assert("id_token" in values) { "'response_types_supported' misses 'id_token'" }
-    assert("vp_token id_token" in values) { "'response_types_supported' misses 'vp_token id_token'" }
 }

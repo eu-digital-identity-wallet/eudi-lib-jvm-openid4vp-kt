@@ -17,20 +17,14 @@ package eu.europa.ec.eudi.openid4vp.internal.response
 
 import com.nimbusds.jose.EncryptionMethod
 import com.nimbusds.jose.JWEAlgorithm
-import com.nimbusds.jose.crypto.RSASSAVerifier
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.ECKey
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
-import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.oauth2.sdk.id.State
 import eu.europa.ec.eudi.openid4vp.*
-import eu.europa.ec.eudi.openid4vp.dcql.CredentialQuery
-import eu.europa.ec.eudi.openid4vp.dcql.Credentials
-import eu.europa.ec.eudi.openid4vp.dcql.DCQL
-import eu.europa.ec.eudi.openid4vp.dcql.DCQLMetaSdJwtVcExtensions
-import eu.europa.ec.eudi.openid4vp.dcql.QueryId
+import eu.europa.ec.eudi.openid4vp.dcql.*
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
 import eu.europa.ec.eudi.openid4vp.internal.request.asURL
@@ -49,7 +43,7 @@ class AuthorizationResponseBuilderTest {
 
     internal object Wallet {
 
-        val config = SiopOpenId4VPConfig(
+        val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
             responseEncryptionConfiguration = ResponseEncryptionConfiguration.Supported(
                 supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
@@ -77,11 +71,6 @@ class AuthorizationResponseBuilderTest {
             .generate()
 
         val metaDataRequestingNotEncryptedResponse = UnvalidatedClientMetaData(
-            subjectSyntaxTypesSupported = listOf(
-                "urn:ietf:params:oauth:jwk-thumbprint",
-                "did:example",
-                "did:key",
-            ),
             vpFormatsSupported = VpFormatsSupported(
                 msoMdoc = VpFormatsSupported.MsoMdoc(
                     issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
@@ -111,54 +100,6 @@ class AuthorizationResponseBuilderTest {
     }
 
     @Test
-    fun `id token request should produce a response with id token JWT`(): Unit = runTest {
-        fun test(state: String? = null) {
-            val responseMode = ResponseMode.DirectPost("https://respond.here".asURL().getOrThrow())
-            val verifierMetaData = ClientMetaDataValidator.validateClientMetaData(
-                Verifier.metaDataRequestingNotEncryptedResponse,
-                responseMode,
-                null,
-                Wallet.config.responseEncryptionConfiguration,
-                Wallet.config.vpConfiguration.vpFormatsSupported,
-            )
-
-            val siopAuthRequestObject =
-                ResolvedRequestObject.SiopAuthentication(
-                    idTokenType = listOf(IdTokenType.AttesterSigned),
-                    subjectSyntaxTypesSupported = verifierMetaData.subjectSyntaxTypesSupported,
-                    responseEncryptionSpecification = verifierMetaData.responseEncryptionSpecification,
-                    client = Client.Preregistered("https%3A%2F%2Fclient.example.org%2Fcb", "Verifier"),
-                    nonce = "0S6_WzA2Mj",
-                    responseMode = ResponseMode.DirectPost("https://respond.here".asURL().getOrThrow()),
-                    state = state,
-                    scope = Scope.make("openid") ?: throw IllegalStateException(),
-                )
-
-            val rsaJWK = SiopIdTokenBuilder.randomKey()
-
-            val idTokenConsensus = Consensus.PositiveConsensus.IdTokenConsensus(
-                idToken = SiopIdTokenBuilder.build(
-                    request = siopAuthRequestObject,
-                    holderInfo = HolderInfo("foo@bar.com", "foo bar"),
-                    rsaJWK = rsaJWK,
-                ),
-            )
-
-            val response = siopAuthRequestObject.responseWith(idTokenConsensus, null)
-            assertIs<AuthorizationResponse.DirectPost>(response)
-            val data = response.data
-            assertIs<AuthorizationResponsePayload.SiopAuthentication>(data)
-            val idToken = data.idToken
-            assertTrue("Id Token signature could not be verified") {
-                SignedJWT.parse(idToken).verify(RSASSAVerifier(rsaJWK))
-            }
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
     fun `when direct_post jwt, builder should return DirectPostJwt with response encryption parameters of correct type`() = runTest {
         fun test(state: String? = null) {
             val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow())
@@ -182,7 +123,7 @@ class AuthorizationResponseBuilderTest {
                 )
             }
             val resolvedRequest =
-                ResolvedRequestObject.OpenId4VPAuthorization(
+                ResolvedRequestObject(
                     query = query,
                     responseEncryptionSpecification = verifierMetaData.responseEncryptionSpecification,
                     vpFormatsSupported = VpFormatsSupported(
@@ -199,7 +140,7 @@ class AuthorizationResponseBuilderTest {
                     verifierInfo = null,
                 )
 
-            val vpTokenConsensus = Consensus.PositiveConsensus.VPTokenConsensus(
+            val vpTokenConsensus = Consensus.PositiveConsensus(
                 VerifiablePresentations(
                     mapOf(
                         QueryId("pdId") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),

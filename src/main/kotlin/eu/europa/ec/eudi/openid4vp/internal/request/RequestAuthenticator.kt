@@ -66,9 +66,9 @@ internal data class AuthenticatedRequest(
     val requestObject: UnvalidatedRequestObject,
 )
 
-internal class RequestAuthenticator(siopOpenId4VPConfig: SiopOpenId4VPConfig, httpClient: HttpClient) {
-    private val clientAuthenticator = ClientAuthenticator(siopOpenId4VPConfig)
-    private val signatureVerifier = JarJwtSignatureVerifier(siopOpenId4VPConfig, httpClient)
+internal class RequestAuthenticator(openId4VPConfig: OpenId4VPConfig, httpClient: HttpClient) {
+    private val clientAuthenticator = ClientAuthenticator(openId4VPConfig)
+    private val signatureVerifier = JarJwtSignatureVerifier(openId4VPConfig, httpClient)
 
     suspend fun authenticate(request: ReceivedRequest): AuthenticatedRequest = coroutineScope {
         val client = clientAuthenticator.authenticateClient(request)
@@ -86,7 +86,7 @@ internal class RequestAuthenticator(siopOpenId4VPConfig: SiopOpenId4VPConfig, ht
     }
 }
 
-internal class ClientAuthenticator(private val siopOpenId4VPConfig: SiopOpenId4VPConfig) {
+internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig) {
     suspend fun authenticateClient(request: ReceivedRequest): AuthenticatedClient {
         val requestObject = when (request) {
             is ReceivedRequest.Signed -> {
@@ -133,7 +133,7 @@ internal class ClientAuthenticator(private val siopOpenId4VPConfig: SiopOpenId4V
                     invalidPrefix("${clientIdPrefix.prefix()} cannot be used in unsigned request")
                 }
                 val attestedClaims =
-                    verifierAttestation(siopOpenId4VPConfig.clock, clientIdPrefix, request, originalClientId)
+                    verifierAttestation(openId4VPConfig.clock, clientIdPrefix, request, originalClientId)
                 AuthenticatedClient.VerifierAttestation(originalClientId, attestedClaims)
             }
 
@@ -174,7 +174,7 @@ internal class ClientAuthenticator(private val siopOpenId4VPConfig: SiopOpenId4V
         val clientId = ensureNotNull(requestObject.clientId) { RequestValidationError.MissingClientId.asException() }
         val verifierId =
             VerifierId.parse(clientId).getOrElse { throw invalidPrefix("Invalid client_id: ${it.message}") }
-        val supportedClientIdPrefix = siopOpenId4VPConfig.supportedClientIdPrefix(verifierId.prefix)
+        val supportedClientIdPrefix = openId4VPConfig.supportedClientIdPrefix(verifierId.prefix)
         ensureNotNull(supportedClientIdPrefix) { RequestValidationError.UnsupportedClientIdPrefix.asException() }
         return verifierId.originalClientId to supportedClientIdPrefix
     }
@@ -267,10 +267,10 @@ private fun verifierAttestation(
 /**
  * Validates a JWT that represents an Authorization Request according to RFC9101
  *
- * @param siopOpenId4VPConfig wallet's configuration
+ * @param openId4VPConfig wallet's configuration
  */
 private class JarJwtSignatureVerifier(
-    private val siopOpenId4VPConfig: SiopOpenId4VPConfig,
+    private val openId4VPConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) {
 
@@ -281,7 +281,7 @@ private class JarJwtSignatureVerifier(
                 jwsTypeVerifier = DefaultJOSEObjectTypeVerifier(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
                 jwsKeySelector = jwsKeySelector(client)
                 jwtClaimsSetVerifier =
-                    TimeChecks(siopOpenId4VPConfig.clock, siopOpenId4VPConfig.jarClockSkew.toKotlinDuration())
+                    TimeChecks(openId4VPConfig.clock, openId4VPConfig.jarClockSkew.toKotlinDuration())
             }
             jwtProcessor.process(signedJwt, null)
         } catch (e: JOSEException) {

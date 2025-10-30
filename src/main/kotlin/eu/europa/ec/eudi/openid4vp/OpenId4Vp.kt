@@ -15,46 +15,43 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import eu.europa.ec.eudi.openid4vp.SiopOpenId4Vp.Companion.invoke
+import eu.europa.ec.eudi.openid4vp.OpenId4Vp.Companion.invoke
 import eu.europa.ec.eudi.openid4vp.internal.request.DefaultAuthorizationRequestResolver
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcher
-import io.ktor.client.HttpClient
+import io.ktor.client.*
 
 /**
- * An interface providing support for handling an OAUTH2 request that represents
- * either an SIOP authentication request,
- * or an OpenId4VP authorization request
- * or a combined SIOP & OpenId4VP request.
+ * An interface providing support for handling an OAuth2.0 request that represents OpenId4VP authorization.
  *
- * To obtain an instance of [SiopOpenId4Vp], method [invoke] can be used.
+ * To obtain an instance of [OpenId4Vp], method [invoke] can be used.
  *
  * @see AuthorizationRequestResolver
  * @see Dispatcher
  */
-interface SiopOpenId4Vp : AuthorizationRequestResolver, Dispatcher, ErrorDispatcher {
+interface OpenId4Vp : AuthorizationRequestResolver, Dispatcher, ErrorDispatcher {
 
     companion object {
 
         /**
-         * Factory method to create a [SiopOpenId4Vp].
+         * Factory method to create a [OpenId4Vp].
          *
-         * @param siopOpenId4VPConfig wallet's configuration
+         * @param openId4VPConfig wallet's configuration
          * @param httpClient A Ktor http client. This can be used to configure ktor
          * to use a specific engine.
          *
-         * @return a [SiopOpenId4Vp]
+         * @return a [OpenId4Vp]
          */
         operator fun invoke(
-            siopOpenId4VPConfig: SiopOpenId4VPConfig,
+            openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
-        ): SiopOpenId4Vp {
-            val requestResolver = DefaultAuthorizationRequestResolver(siopOpenId4VPConfig, httpClient)
+        ): OpenId4Vp {
+            val requestResolver = DefaultAuthorizationRequestResolver(openId4VPConfig, httpClient)
             val dispatcher = DefaultDispatcher(httpClient)
             return object :
                 AuthorizationRequestResolver by requestResolver,
                 Dispatcher by dispatcher,
                 ErrorDispatcher by dispatcher,
-                SiopOpenId4Vp {}
+                OpenId4Vp {}
         }
     }
 }

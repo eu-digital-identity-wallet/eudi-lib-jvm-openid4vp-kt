@@ -29,58 +29,20 @@ internal sealed interface AuthorizationResponsePayload : java.io.Serializable {
     val clientId: VerifierId?
     val encryptionParameters: EncryptionParameters?
 
-    sealed interface Success : AuthorizationResponsePayload
-
     /**
-     * In response to a [ResolvedRequestObject.SiopAuthentication]
-     * and holder's [Consensus.PositiveConsensus.IdTokenConsensus]
+     * In response to a [ResolvedRequestObject].
      *
-     * @param idToken The id_token produced by the wallet
-     * @param state the state of the [request][ResolvedRequestObject.SiopAuthentication.state]
+     * @property verifiablePresentations the vp related information that fulfils the [ResolvedRequestObject.query]
+     * @property state the state of the [request][ResolvedRequestObject.state]
+     * @property encryptionParameters the encryption parameters that may be needed during the response dispatch
      */
-    data class SiopAuthentication(
-        val idToken: Jwt,
-        override val nonce: String,
-        override val state: String?,
-        override val clientId: VerifierId,
-        override val encryptionParameters: EncryptionParameters? = null,
-    ) : Success
-
-    /**
-     * In response to a [ResolvedRequestObject.OpenId4VPAuthorization]
-     * and holder's [Consensus.PositiveConsensus.VPTokenConsensus]
-     *
-     * @param verifiablePresentations the vp related information
-     * that fulfils the [ResolvedRequestObject.OpenId4VPAuthorization.query]
-     * @param state the state of the [ request][ResolvedRequestObject.OpenId4VPAuthorization.state]
-     * @param encryptionParameters the encryption parameters that may be needed during the response dispatch
-     */
-    data class OpenId4VPAuthorization(
+    data class Success(
         val verifiablePresentations: VerifiablePresentations,
         override val nonce: String,
         override val state: String?,
         override val clientId: VerifierId,
         override val encryptionParameters: EncryptionParameters? = null,
-    ) : Success
-
-    /**
-     * In response to a [ResolvedRequestObject.SiopOpenId4VPAuthentication]
-     * and holder's [Consensus.PositiveConsensus.IdAndVPTokenConsensus]
-     *
-     * @param idToken The id_token produced by the wallet
-     * @param verifiablePresentations the vp related information
-     * that fulfils the [ResolvedRequestObject.OpenId4VPAuthorization.query]
-     * @param state the state of the [request][ResolvedRequestObject.SiopOpenId4VPAuthentication.state]
-     * @param encryptionParameters the encryption parameters that may be needed during the response dispatch
-     */
-    data class SiopOpenId4VPAuthentication(
-        val idToken: Jwt,
-        val verifiablePresentations: VerifiablePresentations,
-        override val nonce: String,
-        override val state: String?,
-        override val clientId: VerifierId,
-        override val encryptionParameters: EncryptionParameters? = null,
-    ) : Success
+    ) : AuthorizationResponsePayload
 
     sealed interface Failed : AuthorizationResponsePayload
 
@@ -226,40 +188,14 @@ private fun ResolvedRequestObject.responsePayload(
             encryptionParameters,
         )
 
-    is Consensus.PositiveConsensus -> when (this) {
-        is ResolvedRequestObject.SiopAuthentication -> {
-            require(consensus is Consensus.PositiveConsensus.IdTokenConsensus) { "IdTokenConsensus expected" }
-            AuthorizationResponsePayload.SiopAuthentication(
-                consensus.idToken,
-                nonce,
-                state,
-                client.id,
-                encryptionParameters,
-            )
-        }
-
-        is ResolvedRequestObject.OpenId4VPAuthorization -> {
-            require(consensus is Consensus.PositiveConsensus.VPTokenConsensus) { "VPTokenConsensus expected" }
-            AuthorizationResponsePayload.OpenId4VPAuthorization(
-                consensus.verifiablePresentations,
-                nonce,
-                state,
-                client.id,
-                encryptionParameters,
-            )
-        }
-
-        is ResolvedRequestObject.SiopOpenId4VPAuthentication -> {
-            require(consensus is Consensus.PositiveConsensus.IdAndVPTokenConsensus) { "IdAndVPTokenConsensus expected" }
-            AuthorizationResponsePayload.SiopOpenId4VPAuthentication(
-                consensus.idToken,
-                consensus.verifiablePresentations,
-                nonce,
-                state,
-                client.id,
-                encryptionParameters,
-            )
-        }
+    is Consensus.PositiveConsensus -> {
+        AuthorizationResponsePayload.Success(
+            consensus.verifiablePresentations,
+            nonce,
+            state,
+            client.id,
+            encryptionParameters,
+        )
     }
 }
 
