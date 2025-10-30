@@ -22,6 +22,7 @@ import com.nimbusds.jose.JWSVerifier
 import com.nimbusds.jose.crypto.ECDHDecrypter
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.oauth2.sdk.id.Issuer
+import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import kotlinx.serialization.json.JsonObject
@@ -369,7 +370,7 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
 }
 
 /**
- * Wallet configuration options for SIOP & OpenId4VP protocols.
+ * Wallet configuration options for OpenId4VP protocol.
  *
  * At minimum, a wallet configuration should define at least a [supportedClientIdPrefixes]
  *
@@ -384,7 +385,7 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * @param supportedClientIdPrefixes the client id prefixes that are supported/trusted by the wallet
  * @param errorDispatchPolicy wallet's policy regarding error dispatching. Defaults to [ErrorDispatchPolicy.OnlyAuthenticatedClients].
  */
-data class SiopOpenId4VPConfig(
+data class OpenId4VPConfig(
     val issuer: Issuer? = SelfIssued,
     val jarConfiguration: JarConfiguration = JarConfiguration.Default,
     val responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
@@ -426,5 +427,5 @@ data class SiopOpenId4VPConfig(
     }
 }
 
-internal fun SiopOpenId4VPConfig.supportedClientIdPrefix(prefix: ClientIdPrefix): SupportedClientIdPrefix? =
+internal fun OpenId4VPConfig.supportedClientIdPrefix(prefix: ClientIdPrefix): SupportedClientIdPrefix? =
     supportedClientIdPrefixes.firstOrNull { it.prefix() == prefix }

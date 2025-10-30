@@ -105,7 +105,7 @@ tasks.jar {
 //
 dokka {
     // used as project name in the header
-    moduleName = "SIOPv2 OpenId4VP"
+    moduleName = "OpenId4VP"
 
     dokkaSourceSets.main {
         // contains descriptions for the module and the packages

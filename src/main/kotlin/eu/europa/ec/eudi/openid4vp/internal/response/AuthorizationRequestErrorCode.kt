@@ -22,7 +22,7 @@ import eu.europa.ec.eudi.openid4vp.ResolutionError.*
 
 internal enum class AuthorizationRequestErrorCode(val code: String) {
 
-    // OAUTH2 & OpenID4VP
+    // OAuth2.0 & OpenID4VP
 
     /**
      * Requested scope value is invalid, unknown, or malformed
@@ -74,14 +74,6 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
      */
     INVALID_REQUEST_URI_METHOD("invalid_request_uri_method"),
     INVALID_TRANSACTION_DATA("invalid_transaction_data"),
-
-    // SIOPv2 Error Codes
-
-    USER_CANCELLED("user_cancelled"),
-    REGISTRATION_VALUE_NOT_SUPPORTED("registration_value_not_supported"),
-    SUBJECT_SYNTAX_TYPES_NOT_SUPPORTED("subject_syntax_types_not_supported"),
-    INVALID_REGISTRATION_URI("invalid_registration_uri"),
-    INVALID_REGISTRATION_OBJECT("invalid_registration_object"),
 
     // JAR errors
     /**
@@ -138,19 +130,13 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
                 InvalidUseOfBothRequestAndRequestUri,
                 is UnsupportedRequestUriMethod,
                 is InvalidVerifierInfo,
+                MissingClientMetadataJwks,
+                is ClientMetadataJwksUnparsable,
                 -> INVALID_REQUEST
 
                 InvalidClientId, UnsupportedClientIdPrefix -> INVALID_CLIENT
 
                 is InvalidRequestUriMethod -> INVALID_REQUEST_URI_METHOD
-
-                MissingClientMetadataJwks,
-                is ClientMetadataJwksUnparsable,
-                -> INVALID_REGISTRATION_OBJECT
-
-                SubjectSyntaxTypesNoMatch,
-                SubjectSyntaxTypesWrongSyntax,
-                -> SUBJECT_SYNTAX_TYPES_NOT_SUPPORTED
 
                 is UnableToFetchRequestObject -> INVALID_REQUEST_URI
                 is InvalidJarJwt -> INVALID_REQUEST_OBJECT

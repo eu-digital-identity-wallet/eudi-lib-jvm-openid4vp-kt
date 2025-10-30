@@ -15,7 +15,6 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject.*
 import java.net.URI
 
 /**
@@ -33,41 +32,12 @@ sealed interface Consensus : java.io.Serializable {
     }
 
     /**
-     * Positive consensus. Holder decided to
-     *  respond to the request
+     * Positive consensus. Holder decided to respond to the request.
+     * The wallet has claims that fulfill Verifier's query, and the holder has chosen the claims to include.
+     *
+     * @property verifiablePresentations the Verifiable Presentations to be included in the authorization response
      */
-    sealed interface PositiveConsensus : Consensus {
-        /**
-         * In response to a [SiopAuthentication]
-         * Holder/Wallet provides a [idToken] JWT
-         *
-         * @param idToken The id_token produced by the wallet
-         */
-        data class IdTokenConsensus(
-            val idToken: Jwt,
-        ) : PositiveConsensus
-
-        /**
-         * In response to a [OpenId4VPAuthorization] where the
-         * wallet has claims that fulfill Verifier's query
-         * and holder has chosen the claims to include
-         * @param verifiablePresentations the Verifiable Presentations to be included in the authorization response
-         */
-        data class VPTokenConsensus(
-            val verifiablePresentations: VerifiablePresentations,
-        ) : PositiveConsensus
-
-        /**
-         * In response to a [SiopOpenId4VPAuthentication]
-         *
-         * @param idToken The id_token produced by the wallet
-         * @param verifiablePresentations the Verifiable Presentations to be included in the authorization response
-         */
-        data class IdAndVPTokenConsensus(
-            val idToken: Jwt,
-            val verifiablePresentations: VerifiablePresentations,
-        ) : PositiveConsensus
-    }
+    data class PositiveConsensus(val verifiablePresentations: VerifiablePresentations) : Consensus
 }
 
 /**

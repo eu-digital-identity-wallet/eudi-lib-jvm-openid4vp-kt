@@ -30,7 +30,6 @@ import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
 import io.ktor.http.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.encodeToString
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -185,8 +184,8 @@ internal class RequestFetcherTest {
     }
 }
 
-private fun config(clientId: String, jarEncryptionRequirement: EncryptionRequirement): SiopOpenId4VPConfig =
-    SiopOpenId4VPConfig(
+private fun config(clientId: String, jarEncryptionRequirement: EncryptionRequirement): OpenId4VPConfig =
+    OpenId4VPConfig(
         jarConfiguration = JarConfiguration(
             supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
             supportedRequestUriMethods = SupportedRequestUriMethods.Post(

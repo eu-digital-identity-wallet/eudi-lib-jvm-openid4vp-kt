@@ -94,5 +94,3 @@ object OpenId4VPSpec {
     const val VERIFIER_INFO_DATA: String = "data"
     const val VERIFIER_INFO_CREDENTIAL_IDS = "credential_ids"
 }
-
-object SIOPv2

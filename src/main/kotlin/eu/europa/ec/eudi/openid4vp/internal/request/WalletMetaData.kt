@@ -18,8 +18,8 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
 import eu.europa.ec.eudi.openid4vp.EncryptionRequirement
+import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
-import eu.europa.ec.eudi.openid4vp.SiopOpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.toJsonObject
 import kotlinx.serialization.json.*
@@ -32,7 +32,7 @@ private const val AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED = "authorization
 private const val RESPONSE_TYPES_SUPPOERTED = "response_types_supported"
 private const val RESPONSE_MODES_SUPPORTED = "response_modes_supported"
 
-internal fun walletMetaData(cfg: SiopOpenId4VPConfig, keys: List<JWK>): JsonObject =
+internal fun walletMetaData(cfg: OpenId4VPConfig, keys: List<JWK>): JsonObject =
     buildJsonObject {
         //
         // Authorization Request signature and encryption parameters
@@ -70,8 +70,6 @@ internal fun walletMetaData(cfg: SiopOpenId4VPConfig, keys: List<JWK>): JsonObje
         }
         putJsonArray(RESPONSE_TYPES_SUPPOERTED) {
             add("vp_token")
-            add("id_token")
-            add("vp_token id_token")
         }
 
         // TODO Investigate is this should be hardcoded, or

@@ -19,7 +19,6 @@ import com.nimbusds.jose.EncryptionMethod
 import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
-import com.nimbusds.jose.jwk.ThumbprintURI
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.UnsupportedClientMetaData
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
@@ -43,8 +42,6 @@ internal object ClientMetaDataValidator {
         responseEncryptionConfiguration: ResponseEncryptionConfiguration,
         walletSupportedVpFormats: VpFormatsSupported,
     ): ValidatedClientMetaData {
-        val types = subjectSyntaxTypes(unvalidated.subjectSyntaxTypesSupported)
-
         val verifierAdvertisedJwkSet = jwks(unvalidated)
         val verifierSupportedEncryptionMethods = responseEncryptionMethodsSupported(unvalidated)
 
@@ -78,42 +75,7 @@ internal object ClientMetaDataValidator {
             if (null != query) vpFormats(unvalidated, query, walletSupportedVpFormats)
             else unvalidated.vpFormatsSupported
 
-        return ValidatedClientMetaData(
-            responseEncryptionSpecification = responseEncryptionSpecification,
-            subjectSyntaxTypesSupported = types,
-            vpFormatsSupported = vpFormatsSupported,
-        )
-    }
-}
-
-private fun subjectSyntaxTypes(subjectSyntaxTypesSupported: List<String>?): List<SubjectSyntaxType> {
-    fun subjectSyntax(value: String) =
-        parseSubjectSyntaxType(value)
-            ?: throw RequestValidationError.SubjectSyntaxTypesWrongSyntax.asException()
-
-    return subjectSyntaxTypesSupported?.map { subjectSyntax(it) } ?: emptyList()
-}
-
-private fun parseSubjectSyntaxType(value: String): SubjectSyntaxType? {
-    fun isDecentralizedIdentifier(): Boolean =
-        !(value.isEmpty() || value.count { it == ':' } != 1 || value.split(':').any { it.isEmpty() })
-
-    fun parseDecentralizedIdentifier(): SubjectSyntaxType.DecentralizedIdentifier =
-        when {
-            value.isEmpty() -> error("Cannot create DID from $value: Empty value passed")
-            value.count { it == ':' } != 1 -> error("Cannot create DID from $value: Wrong syntax")
-            value.split(':')
-                .any { it.isEmpty() } -> error("Cannot create DID from $value: DID components cannot be empty")
-
-            else -> SubjectSyntaxType.DecentralizedIdentifier(value.split(':')[1])
-        }
-
-    fun isJWKThumbprint(): Boolean = value != ThumbprintURI.PREFIX
-
-    return when {
-        isJWKThumbprint() -> SubjectSyntaxType.JWKThumbprint
-        isDecentralizedIdentifier() -> parseDecentralizedIdentifier()
-        else -> null
+        return ValidatedClientMetaData(responseEncryptionSpecification, vpFormatsSupported)
     }
 }
 

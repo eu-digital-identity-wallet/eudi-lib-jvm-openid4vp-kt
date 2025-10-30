@@ -1,4 +1,4 @@
-# EUDI SIOPv2 OpenId4VP library
+# EUDI OpenId4VP library
 
 :heavy_exclamation_mark: **Important!** Before you proceed, please read
 the [EUDI Wallet Reference Implementation project description](https://github.com/eu-digital-identity-wallet/.github/blob/main/profile/reference-implementation.md)
@@ -15,22 +15,18 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
   * [Dispatch authorization response to verifier / RP](#dispatch-authorization-response-to-verifier--rp)
   * [Dispatch authorization error response to verifier / RP](#dispatch-authorization-error-response-to-verifier--rp)
   * [Example](#example)
-* [SIOPv2 & OpenId4VP features supported](#siopv2--openid4vp-features-supported)
+* [OpenId4VP features supported](#openid4vp-features-supported)
 * [How to contribute](#how-to-contribute)
 * [License](#license)
 
 ## Overview
 
-This is a Kotlin library, targeting JVM, that supports 
-the [SIOPv2 (draft 13)](https://openid.github.io/SIOPv2/openid-connect-self-issued-v2-wg-draft.html) 
-and [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocols.
-In particular, the library focus on the wallet's role using those two protocols with constraints
-included in ISO 23220-4 and ISO-18013-7 and provides the following features:
+This is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
+In particular, the library focus on the wallet's role using this protocol with constraints included in ISO 23220-4 and ISO-18013-7 and provides the following features:
 
 | Feature                                                                                                                   | Coverage                                                                                                                               |
 |---------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
 | [Verifiable Presentations Authorization Requests](#resolve-an-authorization-request-uri)                                  | ✅                                                                                                                                      |
-| Self-Issued OpenID Provider Authorization Requests                                                                        | ✅                                                                                                                                      |
 | Client authentication prefixes                                                                                            | ✅ pre-registered, ✅ redirect_uri, ❌ openid_federation, ✅ decentralized_identifier, ✅ verifier_attestation, ✅ x509_san_dns, ✅ x509_hash |
 | Attestation query dialect                                                                                                 | ✅ DCQL                                                                                                                                 |
 | Signed/encrypted authorization requests (JAR)                                                                             | ✅                                                                                                                                      |
@@ -63,11 +59,11 @@ The released software is an initial development release version:
 ```kotlin
 // Include library in dependencies in build.gradle.kts
 dependencies {
-    implementation("eu.europa.ec.euidw:eudi-lib-jvm-siop-openid4vp-kt:$version")
+    implementation("eu.europa.ec.euidw:eudi-lib-jvm-openid4vp-kt:$version")
 }
 ```
 
-The entry point to the library is the interface [SiopOpenId4Vp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/SiopOpenId4Vp.kt)
+The entry point to the library is the interface [OpenId4Vp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/OpenId4Vp.kt)
 Currently, the library offers an implementation of this interface based on [Ktor](https://ktor.io/) Http Client.
 Ktor is built from the ground up using Kotlin and Coroutines.
 
@@ -76,8 +72,8 @@ An instance of the interface can be obtained with the following code
 ```kotlin
 import eu.europa.ec.eudi.openid4vp.*
 
-val walletConfig: SiopOpenId4VPConfig = SiopOpenId4VPConfig(
-)
+val walletConfig: OpenId4VPConfig = OpenId4VPConfig(...)
+
 val httpClient = HttpClient {
   install(ContentNegotiation) {
     json(json)
@@ -85,16 +81,13 @@ val httpClient = HttpClient {
   expectSuccess = true
 }
 
-val siopOpenId4Vp = SiopOpenId4Vp(walletConfig, httpClient)
+val openId4Vp = OpenId4Vp(walletConfig, httpClient)
 ```
 
 ### Resolve an authorization request URI
 
-Wallet receives an OAUTH2 Authorization request, formed by the Verifier, that may represent
-
-- a [SIOPv2 authentication request](https://openid.github.io/SIOPv2/openid-connect-self-issued-v2-wg-draft.html#name-self-issued-openid-provider-a), or
-- a [OpenID4VP authorization request](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-authorization-request) or,
-- a combined [SIOP & OpenID4VP request](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-combining-this-specificatio)
+Wallet receives an OAuth2.0 Authorization request, formed by the Verifier, that represents an
+[OpenID4VP authorization request](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-authorization-request).
 
 In the same device scenario, the aforementioned authorization request reaches the wallet in terms of a deep link.
 Similarly, in the cross-device scenario, the request would be obtained via scanning a QR Code.
@@ -112,7 +105,7 @@ import eu.europa.ec.eudi.openid4vp.*
 
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val resolution = siopOpenId4Vp.resolveRequestUri(authorizationRequestUri)
+val resolution = openId4Vp.resolveRequestUri(authorizationRequestUri)
 val requestObject = when (resolution) {
     is Resolution.Invalid -> throw resolution.error.asException()
     is Resolution.Success -> resolution.requestObject
@@ -121,13 +114,10 @@ val requestObject = when (resolution) {
 ```
 ### Holder's consensus, Handling of a valid authorization request
 
-After receiving a valid authorization, the wallet has to process it. Depending on the type of request, this means
+After receiving a valid authorization, the wallet has to process it. This means:
 
-* For a SIOPv2 authentication request, wallet must get holder's consensus and provide an `id_token`
-* For an OpenID4VP authorization request,
-  * wallet should check whether holder has claims that can fulfill verifier's requirements
-  * let the holder choose which claims will be presented to the verifier and form a `vp_token`
-* For a combined SIOP & OpenID4VP request, wallet should perform both actions described above.
+* wallet should check whether holder has claims that can fulfill verifier's requirements
+* let the holder choose which claims will be presented to the verifier and form a `vp_token`
 
 This functionality is a wallet concern, and it is not supported directly by the library
 
@@ -150,9 +140,9 @@ It is the caller's responsibility to redirect the user to this URI.
 
 ```kotlin
 val requestObject // calculated in previous step
-val idToken : Jwt // provided by wallet
-val consensus =  Consensus.PositiveConsensus.IdTokenConsensus(idToken)
-val dispatchOutcome = siopOpenId4Vp.dispatch(requestObject, consensus)
+val verifiablePresentations: VerifiablePresentations // provided by wallet
+val consensus =  Consensus.PositiveConsensus(verifiablePresentations)
+val dispatchOutcome = openId4Vp.dispatch(requestObject, consensus)
 ```
 
 ### Dispatch authorization error response to verifier / RP
@@ -162,7 +152,7 @@ missing required data or being malformed, a Resolution.Invalid is returned. Depe
 AuthorizationRequestError that occurred, the library might be able to send an authorization error response to the verifier / RP.
 
 Additionally, wallet can configure a policy regarding error dispatching to unauthenticated clients. Wallet can configure
-via [SiopOpenId4VPConfig.errorDispatchPolicy](src/main/kotlin/eu/europa/ec/eudi/openid4vp/Config.kt) whether to allow
+via [OpenId4VPConfig.errorDispatchPolicy](src/main/kotlin/eu/europa/ec/eudi/openid4vp/Config.kt) whether to allow
 dispatching of authorization error response to unauthenticated clients, or allow dispatching of authorization error 
 responses only to authenticated clients.
 
@@ -187,12 +177,12 @@ import eu.europa.ec.eudi.openid4vp.*
 
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val resolution = siopOpenId4Vp.resolveRequestUri(authorizationRequestUri)
+val resolution = openId4Vp.resolveRequestUri(authorizationRequestUri)
 if (resolution is Resolution.Invalid) {
   val (error, errorDispatchDetails) = resolution.error
   errorDispatchDetails?.let {
     val encryptionParameters: EncryptionParameters = TODO()
-    val dispatchOutcome = siopOpenId4Vp.dispatchError(error, it, encryptionParameters)
+    val dispatchOutcome = openId4Vp.dispatchError(error, it, encryptionParameters)
     when (dispatchOutcome) {
       is DispatchOutcome.RedirectURI -> TODO("Caller must redirect the user to '${dispatchOutcome.value}'")
       is DispatchOutcome.VerifierResponse.Accepted -> TODO("Verifier/RP successfully received authorization error response. Caller must redirect user to '${dispatchOutcome.redirectURI}'")
@@ -206,7 +196,7 @@ if (resolution is Resolution.Invalid) {
 
 Project contains an [example](src/test/kotlin/eu/europa/ec/eudi/openid4vp/Example.kt) which
 demonstrates the functionality of the library and in particular the interaction of a
-`Verifier` and a `Wallet` via Verifier's trusted end-point to perform an SIOP Authentication, and an OpenId4VP Authorization.
+`Verifier` and a `Wallet` via Verifier's trusted end-point to perform an OpenId4VP Authorization.
 
 To run the example, you will need to clone [Verifier's trusted end-point](https://github.com/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt)
 and run it using
@@ -217,7 +207,7 @@ and run it using
 and then run the Example.
 
 
-## SIOPv2 & OpenId4VP features supported
+## OpenId4VP features supported
 
 ### Parameter `response_mode`
 
@@ -298,7 +288,7 @@ Library parses and validates the verifier metadata.
 
 ### Supported response types
 
-Library currently supports `response_type` equal to `id_token`, `vp_token` or `vp_token id_token`
+Library currently supports `response_type` equal to `vp_token`
 
 ## How to contribute
 

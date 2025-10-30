@@ -17,7 +17,6 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.*
-import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject.*
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.ensureNotNull
@@ -27,88 +26,42 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import java.net.URI
 import java.net.URL
 
-internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenId4VPConfig) {
+internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConfig) {
 
     /**
-     * Validates that the given [request] represents a valid and supported [ResolvedRequestObject]
+     * Validates that the given [request] represents a valid [ResolvedRequestObject].
      *
      * @param request The request to validate
-     * @return if given [request] is valid returns an appropriate [ResolvedRequestObject]. Otherwise,
+     *
+     * @return if given [request] is valid returns a [ResolvedRequestObject]. Otherwise,
      * raises an AuthorizationRequestException. Validation rules violations are reported using [AuthorizationRequestError]
      * wrapped inside the [specific exception][AuthorizationRequestException]
      */
     fun validateRequestObject(request: AuthenticatedRequest): ResolvedRequestObject {
         val (client, requestObject) = request
+
+        ensureVpTokenResponseType(requestObject)
         val scope = requiredScope(requestObject)
         val nonOpenIdScope = with(Scope) { scope.getOrNull()?.items()?.filter { it != OpenId }?.mergeOrNull() }
         val state = requestObject.state
         val nonce = requiredNonce(requestObject)
-        val responseType = requiredResponseType(requestObject)
         val responseMode = requiredResponseMode(client, requestObject)
-        val idTokenType = optionalIdTokenType(requestObject)
+        val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpConfiguration.vpFormatsSupported)
+        val transactionData = optionalTransactionData(requestObject, query)
+        val verifierInfo = optionalVerifierInfo(query, requestObject)
+        val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
 
-        fun idToken(): SiopAuthentication {
-            val clientMetaData = optionalClientMetaData(responseMode, null, requestObject)
-            return SiopAuthentication(
-                client = client.toClient(),
-                responseMode = responseMode,
-                state = state,
-                nonce = nonce,
-                responseEncryptionSpecification = clientMetaData?.responseEncryptionSpecification,
-                idTokenType = idTokenType,
-                subjectSyntaxTypesSupported = clientMetaData?.subjectSyntaxTypesSupported.orEmpty(),
-                scope = scope.getOrThrow(),
-            )
-        }
-
-        fun vpToken(): OpenId4VPAuthorization {
-            val query = requiredDcqlQuery(requestObject, nonOpenIdScope, siopOpenId4VPConfig.vpConfiguration.vpFormatsSupported)
-            val transactionData = optionalTransactionData(requestObject, query)
-            val verifierInfo = optionalVerifierInfo(query, requestObject)
-            val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
-            return OpenId4VPAuthorization(
-                client = client.toClient(),
-                responseMode = responseMode,
-                state = state,
-                nonce = nonce,
-                responseEncryptionSpecification = clientMetaData?.responseEncryptionSpecification,
-                vpFormatsSupported = clientMetaData?.vpFormatsSupported,
-                query = query,
-                transactionData = transactionData,
-                verifierInfo = verifierInfo,
-            )
-        }
-
-        fun idAndVpToken(): SiopOpenId4VPAuthentication {
-            val query = requiredDcqlQuery(requestObject, nonOpenIdScope, siopOpenId4VPConfig.vpConfiguration.vpFormatsSupported)
-            val transactionData = optionalTransactionData(requestObject, query)
-            val verifierInfo = optionalVerifierInfo(query, requestObject)
-            val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
-            return SiopOpenId4VPAuthentication(
-                client = client.toClient(),
-                responseMode = responseMode,
-                state = state,
-                nonce = nonce,
-                responseEncryptionSpecification = clientMetaData?.responseEncryptionSpecification,
-                vpFormatsSupported = clientMetaData?.vpFormatsSupported,
-                idTokenType = idTokenType,
-                subjectSyntaxTypesSupported = clientMetaData?.subjectSyntaxTypesSupported.orEmpty(),
-                scope = scope.getOrThrow(),
-                query = query,
-                transactionData = transactionData,
-                verifierInfo = verifierInfo,
-            )
-        }
-
-        return when (responseType) {
-            ResponseType.VpAndIdToken -> {
-                if (scope.getOrNull()?.contains(Scope.OpenId) == true) idAndVpToken()
-                else vpToken()
-            }
-
-            ResponseType.IdToken -> idToken()
-            ResponseType.VpToken -> vpToken()
-        }
+        return ResolvedRequestObject(
+            client = client.toClient(),
+            responseMode = responseMode,
+            state = state,
+            nonce = nonce,
+            responseEncryptionSpecification = clientMetaData?.responseEncryptionSpecification,
+            vpFormatsSupported = clientMetaData?.vpFormatsSupported,
+            query = query,
+            transactionData = transactionData,
+            verifierInfo = verifierInfo,
+        )
     }
 
     /**
@@ -156,7 +109,7 @@ internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenI
 
     private fun lookupKnownDCQLQueries(scope: Scope): DCQL {
         scope.items().forEach { item ->
-            siopOpenId4VPConfig.vpConfiguration.knownDCQLQueriesPerScope[item.value]
+            openId4VPConfig.vpConfiguration.knownDCQLQueriesPerScope[item.value]
                 ?.let { return it }
         }
         throw ResolutionError.UnknownScope(scope).asException()
@@ -170,7 +123,7 @@ internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenI
             runCatchingCancellable {
                 unresolvedTransactionData.values.map { unresolved ->
                     val transactionData = TransactionData.parse(unresolved, query).getOrThrow()
-                    transactionData.ensureSupported(siopOpenId4VPConfig.vpConfiguration.supportedTransactionDataTypes)
+                    transactionData.ensureSupported(openId4VPConfig.vpConfiguration.supportedTransactionDataTypes)
                     transactionData
                 }
             }.getOrElse { error -> throw ResolutionError.InvalidTransactionData(error).asException() }
@@ -202,19 +155,6 @@ internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenI
 
         return verifierInfo
     }
-
-    private fun optionalIdTokenType(unvalidated: UnvalidatedRequestObject): List<IdTokenType> =
-        unvalidated.idTokenType
-            ?.trim()
-            ?.split(" ")
-            ?.map { type ->
-                when (type) {
-                    "subject_signed_id_token" -> IdTokenType.SubjectSigned
-                    "attester_signed_id_token" -> IdTokenType.AttesterSigned
-                    else -> error("Invalid id_token_type $type")
-                }
-            }
-            ?: emptyList()
 
     private fun requiredResponseMode(
         client: AuthenticatedClient,
@@ -315,21 +255,21 @@ internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenI
         ensureNotNull(unvalidated.nonce) { MissingNonce.asException() }
 
     /**
-     * Makes sure that [unvalidated] contains a supported [ResponseType].
-     * Function check [UnvalidatedRequestObject.responseType]
+     * Verifier that [unvalidated] contains the supported `vp_token` `response_type`.
      *
-     * @param unvalidated the request to validate
-     * @return the supported [ResponseType], or [RequestValidationError.MissingResponseType] if the response type is not provided
-     * or [RequestValidationError.UnsupportedResponseType] if the response type is not supported
+     * @throws [RequestValidationError.MissingResponseType] if [unvalidated] contains no `response_type`
+     * @throws [RequestValidationError.UnsupportedResponseType] if [unvalidated] contains an unsupported `response_type`
      */
-    private fun requiredResponseType(unvalidated: UnvalidatedRequestObject): ResponseType =
-        when (val rt = unvalidated.responseType?.trim()) {
-            "vp_token" -> ResponseType.VpToken
-            "vp_token id_token", "id_token vp_token" -> ResponseType.VpAndIdToken
-            "id_token" -> ResponseType.IdToken
-            null -> throw MissingResponseType.asException()
-            else -> throw UnsupportedResponseType(rt).asException()
+    private fun ensureVpTokenResponseType(unvalidated: UnvalidatedRequestObject) {
+        val responseType = unvalidated.responseType?.trim()
+        if (responseType.isNullOrBlank()) {
+            throw MissingResponseType.asException()
         }
+
+        if ("vp_token" != responseType) {
+            throw UnsupportedResponseType(responseType).asException()
+        }
+    }
 
     private fun optionalClientMetaData(
         responseMode: ResponseMode,
@@ -349,8 +289,8 @@ internal class RequestObjectValidator(private val siopOpenId4VPConfig: SiopOpenI
                     it,
                     responseMode,
                     query,
-                    siopOpenId4VPConfig.responseEncryptionConfiguration,
-                    siopOpenId4VPConfig.vpConfiguration.vpFormatsSupported,
+                    openId4VPConfig.responseEncryptionConfiguration,
+                    openId4VPConfig.vpConfiguration.vpFormatsSupported,
                 )
             }
 
@@ -385,12 +325,6 @@ private fun ResponseMode.uri(): URI = when (this) {
     is ResponseMode.FragmentJwt -> redirectUri
     is ResponseMode.Query -> redirectUri
     is ResponseMode.QueryJwt -> redirectUri
-}
-
-private enum class ResponseType {
-    VpToken,
-    IdToken,
-    VpAndIdToken,
 }
 
 private fun TransactionData.ensureSupported(supportedTransactionDataTypes: List<SupportedTransactionDataType>) =

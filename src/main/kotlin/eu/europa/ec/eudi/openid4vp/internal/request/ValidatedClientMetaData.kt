@@ -15,7 +15,9 @@
  */
 package eu.europa.ec.eudi.openid4vp.internal.request
 
-import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
+import eu.europa.ec.eudi.openid4vp.ResponseEncryptionSpecification
+import eu.europa.ec.eudi.openid4vp.VpFormatsSupported
 import kotlinx.serialization.Required
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -24,16 +26,11 @@ import kotlinx.serialization.json.JsonObject
 @Serializable
 internal data class UnvalidatedClientMetaData(
     @SerialName(OpenId4VPSpec.JWKS) val jwks: JsonObject? = null,
-    @SerialName("subject_syntax_types_supported") val subjectSyntaxTypesSupported: List<String>? = emptyList(),
-
-    @SerialName(OpenId4VPSpec.RESPONSE_ENCRYPTION_METHODS_SUPPORTED)
-    val responseEncryptionMethodsSupported: List<String>? = null,
-
+    @SerialName(OpenId4VPSpec.RESPONSE_ENCRYPTION_METHODS_SUPPORTED) val responseEncryptionMethodsSupported: List<String>? = null,
     @SerialName(OpenId4VPSpec.VP_FORMATS_SUPPORTED) @Required val vpFormatsSupported: VpFormatsSupported,
 )
 
 internal data class ValidatedClientMetaData(
     val responseEncryptionSpecification: ResponseEncryptionSpecification? = null,
-    val subjectSyntaxTypesSupported: List<SubjectSyntaxType> = emptyList(),
     val vpFormatsSupported: VpFormatsSupported,
 )
