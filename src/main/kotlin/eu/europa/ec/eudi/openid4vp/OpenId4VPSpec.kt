@@ -38,7 +38,7 @@ object OpenId4VPSpec {
     const val RM_DIRECT_POST: String = "direct_post"
     const val RM_DIRECT_POST_JWT: String = "direct_post.jwt"
 
-    const val VP_TOKEN: String = "vp_token"
+    const val RESPONSE_TYPE_VP_TOKEN: String = "vp_token"
 
     const val WALLET_NONCE: String = "wallet_nonce"
     const val WALLET_METADATA: String = "wallet_metadata"

@@ -266,7 +266,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
             throw MissingResponseType.asException()
         }
 
-        if ("vp_token" != responseType) {
+        if (OpenId4VPSpec.RESPONSE_TYPE_VP_TOKEN != responseType) {
             throw UnsupportedResponseType(responseType).asException()
         }
     }
