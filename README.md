@@ -59,7 +59,7 @@ The released software is an initial development release version:
 ```kotlin
 // Include library in dependencies in build.gradle.kts
 dependencies {
-    implementation("eu.europa.ec.euidw:eudi-lib-jvm-openid4vp-kt:$version")
+    implementation("eu.europa.ec.euidw:eudi-lib-jvm-siop-openid4vp-kt:$version")
 }
 ```
 
