@@ -429,3 +429,6 @@ data class OpenId4VPConfig(
 
 internal fun OpenId4VPConfig.supportedClientIdPrefix(prefix: ClientIdPrefix): SupportedClientIdPrefix? =
     supportedClientIdPrefixes.firstOrNull { it.prefix() == prefix }
+
+@Deprecated("Use OpenId4VPConfig instead", ReplaceWith("OpenId4VPConfig"))
+typealias SiopOpenId4VPConfig = OpenId4VPConfig
