@@ -55,3 +55,6 @@ interface OpenId4Vp : AuthorizationRequestResolver, Dispatcher, ErrorDispatcher 
         }
     }
 }
+
+@Deprecated("Use OpenId4Vp instead", ReplaceWith("OpenId4Vp"))
+typealias SiopOpenId4Vp = OpenId4Vp
