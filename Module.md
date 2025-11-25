@@ -1,6 +1,6 @@
 # Module OpenId4VP
 
-The `eudi-lib-jvm-siop-openid4vp-kt` is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
+The `eudi-lib-jvm-openid4vp-kt` is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
 In particular, the library focus on the wallet's role using those this protocol with constraints included in ISO 23220-4 and ISO-18013-7
 
 
