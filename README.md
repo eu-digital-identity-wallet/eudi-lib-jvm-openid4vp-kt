@@ -21,20 +21,6 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 
 ## Overview
 
-> [!IMPORTANT]
->
-> If you require support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html), use library versions till _**v0.11.x**_ which are published 
-> with the following Maven coordinates:
-> 
-> * Group Id: eu.europa.ec.eudi
-> * Artifact Id: eudi-lib-jvm-siop-openid4vp-kt
-> 
-> Starting with version _**v0.12.0**_ support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and
-> the library is published with the following Maven coordinates:
-> 
-> * Group Id: eu.europa.ec.eudi
-> * Artifact Id: eudi-lib-jvm-openid4vp-kt
-
 This is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
 In particular, the library focuses on the wallet's role using this protocol, and provides the following features:
 
@@ -69,6 +55,20 @@ The released software is an initial development release version:
 -  Only the latest version of the software will be supported
 
 ## How to use
+
+> [!IMPORTANT]
+>
+> If you require support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html), use library versions till _**v0.11.x**_ which are published
+> with the following Maven coordinates:
+>
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-siop-openid4vp-kt
+>
+> Starting with version _**v0.12.0**_ support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and
+> the library is published with the following Maven coordinates:
+>
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-openid4vp-kt
 
 ```kotlin
 // Include library in dependencies in build.gradle.kts
