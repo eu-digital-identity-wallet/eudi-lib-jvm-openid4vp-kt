@@ -1,7 +1,7 @@
 # Module OpenId4VP
 
-The `eudi-lib-jvm-siop-openid4vp-kt` is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
-In particular, the library focus on the wallet's role using those this protocol with constraints included in ISO 23220-4 and ISO-18013-7
+`eudi-lib-jvm-openid4vp-kt` is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
+In particular, the library focuses on the wallet's role using this protocol.
 
 
 ## eu.europa.ec.eudi.openid4vp
@@ -132,8 +132,6 @@ OAUTH2 foresees that `AuthorizationRequest` is encoded as an HTTP GET request wh
 OpenID4VP on the other hand, foresees in addition, support to
 [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101.html#request_object) where
 the aforementioned HTTP Get contains a JWT encoded `AuthorizationRequest`
-
-Finally, ISO-23220-4 requires the usage of RFC 9101
 
 Library supports obtaining the request object both by value (using `request` attribute) or
 by reference (using `request_uri`)

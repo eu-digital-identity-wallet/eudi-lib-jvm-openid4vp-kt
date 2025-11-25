@@ -22,7 +22,7 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 ## Overview
 
 This is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
-In particular, the library focus on the wallet's role using this protocol with constraints included in ISO 23220-4 and ISO-18013-7 and provides the following features:
+In particular, the library focuses on the wallet's role using this protocol, and provides the following features:
 
 | Feature                                                                                                                   | Coverage                                                                                                                               |
 |---------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
@@ -56,10 +56,24 @@ The released software is an initial development release version:
 
 ## How to use
 
+> [!IMPORTANT]
+>
+> If you require support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html), use library versions till _**v0.11.x**_ which are published
+> with the following Maven coordinates:
+>
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-siop-openid4vp-kt
+>
+> Starting with version _**v0.12.0**_ support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and
+> the library is published with the following Maven coordinates:
+>
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-openid4vp-kt
+
 ```kotlin
 // Include library in dependencies in build.gradle.kts
 dependencies {
-    implementation("eu.europa.ec.euidw:eudi-lib-jvm-siop-openid4vp-kt:$version")
+    implementation("eu.europa.ec.eudi:eudi-lib-jvm-openid4vp-kt:$version")
 }
 ```
 
@@ -258,8 +272,6 @@ OAUTH2 foresees that `AuthorizationRequest` is encoded as an HTTP GET request wh
 OpenID4VP on the other hand, foresees in addition, support to
 [RFC 9101](https://www.rfc-editor.org/rfc/rfc9101.html#request_object) where
 the aforementioned HTTP Get contains a JWT encoded `AuthorizationRequest`
-
-Finally, ISO-23220-4 requires the usage of RFC 9101
 
 Library supports obtaining the request object both by value (using `request` attribute) or
 by reference (using `request_uri`)
