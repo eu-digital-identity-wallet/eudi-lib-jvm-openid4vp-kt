@@ -5,12 +5,6 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
-> [!IMPORTANT]  
-> 
-> Since [v0.12.0](https://github.com/eu-digital-identity-wallet/eudi-lib-jvm-openid4vp-kt/releases/tag/v0.12.0) support for 
-> [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and the Maven artifact has been renamed to 
-> _**eudi-lib-jvm-openid4vp-kt**_.
-
 ## Table of contents
 
 * [Overview](#overview)
@@ -26,6 +20,20 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 * [License](#license)
 
 ## Overview
+
+> [!IMPORTANT]
+>
+> If you require support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html), use library versions till _**v0.11.x**_ which are published 
+> with the following Maven coordinates:
+> 
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-siop-openid4vp-kt
+> 
+> Starting with version _**v0.12.0**_ support for [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and
+> the library is published with the following Maven coordinates:
+> 
+> * Group Id: eu.europa.ec.eudi
+> * Artifact Id: eudi-lib-jvm-openid4vp-kt
 
 This is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
 In particular, the library focuses on the wallet's role using this protocol, and provides the following features:
