@@ -5,6 +5,12 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
 
+> [!IMPORTANT]  
+> 
+> Since [v0.12.0](https://github.com/eu-digital-identity-wallet/eudi-lib-jvm-openid4vp-kt/releases/tag/v0.12.0) support for 
+> [SIOPv2](https://openid.net/specs/openid-connect-self-issued-v2-1_0.html) has been dropped, and the Maven artifact has been renamed to 
+> _**eudi-lib-jvm-openid4vp-kt**_.
+
 ## Table of contents
 
 * [Overview](#overview)
