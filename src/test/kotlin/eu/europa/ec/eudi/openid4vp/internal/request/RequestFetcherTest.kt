@@ -24,7 +24,9 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
+import com.nimbusds.oauth2.sdk.id.Issuer
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import io.ktor.client.engine.mock.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -42,9 +44,10 @@ internal class RequestFetcherTest {
 
     @Test
     fun `request uri method post - fetching fails on error`() = runTest {
+        val issuer = "eudi_wallet"
         val clientId = "verifier"
         val jarEncryptionRequirement = EncryptionRequirement.NotRequired
-        val config = config(clientId, jarEncryptionRequirement)
+        val config = config(issuer = issuer, clientId = clientId, jarEncryptionRequirement)
         val requestUri = URI.create("https://verifier/signed-request")
 
         val engine = MockEngine(requestUri, jarEncryptionRequirement) { encryptionKey, walletNonce ->
@@ -67,17 +70,55 @@ internal class RequestFetcherTest {
     }
 
     @Test
-    fun `request uri method post - fetch signed request object`() = runTest {
+    fun `request uri method post - fails on audience mismatch`() = runTest {
+        val issuer = "eudi_wallet"
         val clientId = "verifier"
         val jarEncryptionRequirement = EncryptionRequirement.NotRequired
-        val config = config(clientId, jarEncryptionRequirement)
+        val config = config(issuer = issuer, clientId = clientId, jarEncryptionRequirement)
         val requestUri = URI.create("https://verifier/signed-request")
 
         lateinit var signedRequest: SignedJWT
         val engine = MockEngine(requestUri, jarEncryptionRequirement) { encryptionKey, walletNonce ->
             assertNull(encryptionKey)
 
-            signedRequest = createSignedRequestObject(clientId, walletNonce)
+            signedRequest = createSignedRequestObject(audience = SelfIssued.value, clientId = clientId, walletNonce = walletNonce)
+
+            respond(
+                content = signedRequest.serialize(),
+                status = HttpStatusCode.OK,
+                headers = headersOf(HttpHeaders.ContentType to listOf("application/oauth-authz-req+jwt")),
+            )
+        }
+        val client = createHttpClient(httpEngine = engine)
+
+        val fetcher = RequestFetcher(client, config)
+        val exception = assertFailsWith(AuthorizationRequestException::class) {
+            val request = UnvalidatedRequest.JwtSecured.PassByReference(
+                clientId = clientId,
+                jwtURI = requestUri.toURL(),
+                requestURIMethod = RequestUriMethod.POST,
+            )
+            fetcher.fetchRequest(request)
+        }
+        assertEquals(
+            RequestValidationError.InvalidJarJwt("JAR '${RFC7519.AUDIENCE}' mismatch. Expected: $issuer, found: ${SelfIssued.value}"),
+            exception.error,
+        )
+    }
+
+    @Test
+    fun `request uri method post - fetch signed request object`() = runTest {
+        val issuer = "eudi_wallet"
+        val clientId = "verifier"
+        val jarEncryptionRequirement = EncryptionRequirement.NotRequired
+        val config = config(issuer = issuer, clientId = clientId, jarEncryptionRequirement)
+        val requestUri = URI.create("https://verifier/signed-request")
+
+        lateinit var signedRequest: SignedJWT
+        val engine = MockEngine(requestUri, jarEncryptionRequirement) { encryptionKey, walletNonce ->
+            assertNull(encryptionKey)
+
+            signedRequest = createSignedRequestObject(audience = issuer, clientId = clientId, walletNonce = walletNonce)
 
             respond(
                 content = signedRequest.serialize(),
@@ -100,20 +141,21 @@ internal class RequestFetcherTest {
 
     @Test
     fun `request uri method post - decryption fails when jar is not encrypted with jwk in jwks`() = runTest {
+        val issuer = "eudi_wallet"
         val clientId = "verifier"
         val jarEncryptionRequirement = EncryptionRequirement.Required(
             supportedEncryptionAlgorithms = listOf(JWEAlgorithm.ECDH_ES_A256KW),
             supportedEncryptionMethods = listOf(EncryptionMethod.A256GCM),
             ephemeralEncryptionKeyCurve = Curve.P_521,
         )
-        val config = config(clientId, jarEncryptionRequirement)
+        val config = config(issuer = issuer, clientId = clientId, jarEncryptionRequirement)
         val requestUri = URI.create("https://verifier/encrypted-request")
 
         lateinit var signedRequest: SignedJWT
         val engine =
             MockEngine(requestUri, jarEncryptionRequirement) { encryptionKey, walletNonce ->
                 assertNotNull(encryptionKey)
-                signedRequest = createSignedRequestObject(clientId, walletNonce)
+                signedRequest = createSignedRequestObject(audience = issuer, clientId = clientId, walletNonce = walletNonce)
                 val encryptedRequest = createEncryptedRequestObject(
                     signedRequest,
                     ECKeyGenerator(jarEncryptionRequirement.ephemeralEncryptionKeyCurve).generate(),
@@ -143,20 +185,21 @@ internal class RequestFetcherTest {
 
     @Test
     fun `request uri method post - fetch encrypted and signed request object`() = runTest {
+        val issuer = "eudi_wallet"
         val clientId = "verifier"
         val jarEncryptionRequirement = EncryptionRequirement.Required(
             supportedEncryptionAlgorithms = listOf(JWEAlgorithm.ECDH_ES_A256KW),
             supportedEncryptionMethods = listOf(EncryptionMethod.A256GCM),
             ephemeralEncryptionKeyCurve = Curve.P_521,
         )
-        val config = config(clientId, jarEncryptionRequirement)
+        val config = config(issuer = issuer, clientId = clientId, jarEncryptionRequirement)
         val requestUri = URI.create("https://verifier/encrypted-request")
 
         lateinit var signedRequest: SignedJWT
         val engine =
             MockEngine(requestUri, jarEncryptionRequirement) { encryptionKey, walletNonce ->
                 assertNotNull(encryptionKey)
-                signedRequest = createSignedRequestObject(clientId, walletNonce)
+                signedRequest = createSignedRequestObject(audience = issuer, clientId = clientId, walletNonce = walletNonce)
                 val encryptedRequest = createEncryptedRequestObject(
                     signedRequest,
                     encryptionKey,
@@ -184,8 +227,9 @@ internal class RequestFetcherTest {
     }
 }
 
-private fun config(clientId: String, jarEncryptionRequirement: EncryptionRequirement): OpenId4VPConfig =
+private fun config(issuer: String, clientId: String, jarEncryptionRequirement: EncryptionRequirement): OpenId4VPConfig =
     OpenId4VPConfig(
+        issuer = Issuer(issuer),
         jarConfiguration = JarConfiguration(
             supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
             supportedRequestUriMethods = SupportedRequestUriMethods.Post(
@@ -206,10 +250,11 @@ private fun config(clientId: String, jarEncryptionRequirement: EncryptionRequire
         supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.Preregistered(PreregisteredClient(clientId, clientId))),
     )
 
-private fun createSignedRequestObject(clientId: String, walletNonce: String): SignedJWT =
+private fun createSignedRequestObject(audience: String, clientId: String, walletNonce: String): SignedJWT =
     SignedJWT(
         JWSHeader.Builder(JWSAlgorithm.ES256).build(),
         JWTClaimsSet.Builder()
+            .audience(audience)
             .claim("client_id", clientId)
             .claim(OpenId4VPSpec.WALLET_NONCE, walletNonce)
             .build(),

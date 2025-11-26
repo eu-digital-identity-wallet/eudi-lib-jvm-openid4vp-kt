@@ -101,3 +101,10 @@ object OpenId4VPSpec {
 object RFC8414 {
     const val ISSUER: String = "issuer"
 }
+
+/**
+ * [JSON Web Token (JWT)](https://www.rfc-editor.org/rfc/rfc7519.html)
+ */
+object RFC7519 {
+    const val AUDIENCE: String = "aud"
+}

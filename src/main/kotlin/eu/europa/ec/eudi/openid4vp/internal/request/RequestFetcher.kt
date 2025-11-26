@@ -23,6 +23,7 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.openid.connect.sdk.Nonce
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.ensureNotNull
 import io.ktor.client.*
@@ -48,19 +49,19 @@ internal class RequestFetcher(
     suspend fun fetchRequest(request: UnvalidatedRequest): ReceivedRequest = when (request) {
         is UnvalidatedRequest.Plain -> ReceivedRequest.Unsigned(request.requestObject)
         is UnvalidatedRequest.JwtSecured -> {
-            val (jwt, walletNonce) = when (request) {
-                is UnvalidatedRequest.JwtSecured.PassByValue -> request.jwt to null
-                is UnvalidatedRequest.JwtSecured.PassByReference -> fetchJwtAndWalletNonce(request)
+            val (jwt, walletNonce, audience) = when (request) {
+                is UnvalidatedRequest.JwtSecured.PassByValue -> Triple(request.jwt, null, SelfIssued.value)
+                is UnvalidatedRequest.JwtSecured.PassByReference -> fetchJwtWalletNonceAndAudience(request)
             }
             with(openId4VPConfig) {
-                ensureValid(expectedClient = request.clientId, expectedWalletNonce = walletNonce, unverifiedJwt = jwt)
+                ensureValid(expectedClient = request.clientId, walletNonce, expectedAudience = audience, unverifiedJwt = jwt)
             }
         }
     }
 
-    private suspend fun fetchJwtAndWalletNonce(
+    private suspend fun fetchJwtWalletNonceAndAudience(
         request: UnvalidatedRequest.JwtSecured.PassByReference,
-    ): Pair<Jwt, Nonce?> {
+    ): Triple<Jwt, Nonce?, String> {
         val (_, requestUri, requestUriMethod) = request
 
         val supportedMethods =
@@ -71,7 +72,7 @@ internal class RequestFetcher(
                 ensure(supportedMethods.isGetSupported()) {
                     unsupportedRequestUriMethod(RequestUriMethod.GET)
                 }
-                httpClient.getJAR(requestUri) to null
+                Triple(httpClient.getJAR(requestUri), null, SelfIssued.value)
             }
 
             RequestUriMethod.POST -> {
@@ -98,7 +99,7 @@ internal class RequestFetcher(
                     jwt.decrypt(ephemeralJarEncryptionKey).getOrThrow()
                 } else jwt
 
-                signedJwt to walletNonce
+                Triple(signedJwt, walletNonce, openId4VPConfig.issuer.value)
             }
         }
     }
@@ -107,6 +108,7 @@ internal class RequestFetcher(
 private fun OpenId4VPConfig.ensureValid(
     expectedClient: String,
     expectedWalletNonce: Nonce?,
+    expectedAudience: String,
     unverifiedJwt: Jwt,
 ): ReceivedRequest.Signed {
     val signedJwt = ensureIsSignedJwt(unverifiedJwt).also(::ensureSupportedSigningAlgorithm)
@@ -114,6 +116,7 @@ private fun OpenId4VPConfig.ensureValid(
     if (expectedWalletNonce != null) {
         ensureSameWalletNonce(expectedWalletNonce, signedJwt)
     }
+    ensureSameAudience(expectedAudience, signedJwt)
     return ReceivedRequest.Signed(signedJwt)
 }
 
@@ -208,3 +211,16 @@ internal suspend fun EncryptionRequirement.Required.ephemeralEncryptionKey(): EC
             .keyUse(KeyUse.ENCRYPTION)
             .generate()
     }
+
+private fun ensureSameAudience(expectedAudience: String, signedJwt: SignedJWT) {
+    val jwtAudience = signedJwt.jwtClaimsSet.audience
+    ensure(!jwtAudience.isNullOrEmpty()) {
+        invalidJwt("JAR is missing '${RFC7519.AUDIENCE}'")
+    }
+    ensure(1 == jwtAudience.size) {
+        invalidJwt("JAR contains more than one values in '${RFC7519.AUDIENCE}'")
+    }
+    ensure(expectedAudience == jwtAudience.first()) {
+        invalidJwt("JAR '${RFC7519.AUDIENCE}' mismatch. Expected: $expectedAudience, found: ${jwtAudience.first()}")
+    }
+}
