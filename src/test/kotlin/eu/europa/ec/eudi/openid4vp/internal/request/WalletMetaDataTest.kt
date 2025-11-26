@@ -77,28 +77,6 @@ class WalletMetaDataTest {
         )
         assertMetadata(config)
     }
-
-    @Test
-    fun `test without issuer`() = runTest {
-        val config = OpenId4VPConfig(
-            issuer = null,
-            supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
-                ),
-            ),
-            jarConfiguration = JarConfiguration(
-                supportedAlgorithms = JarConfiguration.Default.supportedAlgorithms,
-                supportedRequestUriMethods = SupportedRequestUriMethods.Get,
-            ),
-        )
-        assertMetadata(config)
-    }
 }
 
 private suspend fun assertMetadata(config: OpenId4VPConfig) {
@@ -241,12 +219,8 @@ private fun assertResponseTypes(walletMetadata: JsonObject) {
     assert("vp_token" in values) { "'response_types_supported' misses 'vp_token'" }
 }
 
-private fun assertIssuer(issuer: Issuer?, walletMetadata: JsonObject) {
-    if (null != issuer) {
-        val issuerInWalletMetadata = assertIs<JsonPrimitive>(walletMetadata[RFC8414.ISSUER])
-        assertTrue(issuerInWalletMetadata.isString)
-        assertEquals(issuer.value, issuerInWalletMetadata.content)
-    } else {
-        assertNull(walletMetadata[RFC8414.ISSUER])
-    }
+private fun assertIssuer(issuer: Issuer, walletMetadata: JsonObject) {
+    val issuerInWalletMetadata = assertIs<JsonPrimitive>(walletMetadata[RFC8414.ISSUER])
+    assertTrue(issuerInWalletMetadata.isString)
+    assertEquals(issuer.value, issuerInWalletMetadata.content)
 }
