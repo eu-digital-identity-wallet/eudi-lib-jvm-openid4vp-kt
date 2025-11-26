@@ -20,6 +20,7 @@ import com.nimbusds.jose.jwk.JWKSet
 import eu.europa.ec.eudi.openid4vp.EncryptionRequirement
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
+import eu.europa.ec.eudi.openid4vp.RFC8414
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.toJsonObject
 import kotlinx.serialization.json.*
@@ -34,6 +35,13 @@ private const val RESPONSE_MODES_SUPPORTED = "response_modes_supported"
 
 internal fun walletMetaData(cfg: OpenId4VPConfig, keys: List<JWK>): JsonObject =
     buildJsonObject {
+        //
+        // Authorization Server Metadata
+        //
+        if (null != cfg.issuer) {
+            put(RFC8414.ISSUER, cfg.issuer.value)
+        }
+
         //
         // Authorization Request signature and encryption parameters
         // Uses properties defined in JAR and JARM specs

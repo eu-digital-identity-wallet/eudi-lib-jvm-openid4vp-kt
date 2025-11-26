@@ -21,6 +21,7 @@ import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
+import com.nimbusds.oauth2.sdk.id.Issuer
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import kotlinx.coroutines.test.runTest
@@ -76,6 +77,28 @@ class WalletMetaDataTest {
         )
         assertMetadata(config)
     }
+
+    @Test
+    fun `test without issuer`() = runTest {
+        val config = OpenId4VPConfig(
+            issuer = null,
+            supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
+            vpConfiguration = VPConfiguration(
+                vpFormatsSupported = VpFormatsSupported(
+                    VpFormatsSupported.SdJwtVc.HAIP,
+                    VpFormatsSupported.MsoMdoc(
+                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    ),
+                ),
+            ),
+            jarConfiguration = JarConfiguration(
+                supportedAlgorithms = JarConfiguration.Default.supportedAlgorithms,
+                supportedRequestUriMethods = SupportedRequestUriMethods.Get,
+            ),
+        )
+        assertMetadata(config)
+    }
 }
 
 private suspend fun assertMetadata(config: OpenId4VPConfig) {
@@ -99,6 +122,7 @@ private suspend fun assertMetadata(config: OpenId4VPConfig) {
     assertJarSigning(config.jarConfiguration.supportedAlgorithms, walletMetaData)
     assertJarEncryption(encryptionRequirement, ephemeralJarEncryptionJwks, walletMetaData)
     assertResponseTypes(walletMetaData)
+    assertIssuer(config.issuer, walletMetaData)
 }
 
 private fun assertJarSigning(supportedAlgorithms: List<JWSAlgorithm>, walletMetaData: JsonObject) {
@@ -215,4 +239,14 @@ private fun assertResponseTypes(walletMetadata: JsonObject) {
     val values = types.map { it.jsonPrimitive.content }
     assertEquals(1, values.size, "'unexpected number of 'response_types_supported'")
     assert("vp_token" in values) { "'response_types_supported' misses 'vp_token'" }
+}
+
+private fun assertIssuer(issuer: Issuer?, walletMetadata: JsonObject) {
+    if (null != issuer) {
+        val issuerInWalletMetadata = assertIs<JsonPrimitive>(walletMetadata[RFC8414.ISSUER])
+        assertTrue(issuerInWalletMetadata.isString)
+        assertEquals(issuer.value, issuerInWalletMetadata.content)
+    } else {
+        assertNull(walletMetadata[RFC8414.ISSUER])
+    }
 }

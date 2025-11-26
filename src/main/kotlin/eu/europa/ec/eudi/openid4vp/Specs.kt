@@ -94,3 +94,10 @@ object OpenId4VPSpec {
     const val VERIFIER_INFO_DATA: String = "data"
     const val VERIFIER_INFO_CREDENTIAL_IDS = "credential_ids"
 }
+
+/**
+ * [OAuth 2.0 Authorization Server Metadata](https://www.rfc-editor.org/rfc/rfc8414.txt)
+ */
+object RFC8414 {
+    const val ISSUER: String = "issuer"
+}
