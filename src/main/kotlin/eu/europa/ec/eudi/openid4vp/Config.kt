@@ -374,7 +374,7 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  *
  * At minimum, a wallet configuration should define at least a [supportedClientIdPrefixes]
  *
- * @param issuer an optional id for the wallet. If not provided defaults to [SelfIssued].
+ * @param issuer an id for the wallet, defaults to [SelfIssued].
  * @param jarConfiguration options related to JWT Secure authorization requests.
  * If not provided, it will default to [JarConfiguration.Default]
  * @param responseEncryptionConfiguration whether wallet supports authorization response encryption. If not specified, it takes the default value
@@ -386,7 +386,7 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * @param errorDispatchPolicy wallet's policy regarding error dispatching. Defaults to [ErrorDispatchPolicy.OnlyAuthenticatedClients].
  */
 data class OpenId4VPConfig(
-    val issuer: Issuer? = SelfIssued,
+    val issuer: Issuer = SelfIssued,
     val jarConfiguration: JarConfiguration = JarConfiguration.Default,
     val responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
     val vpConfiguration: VPConfiguration,
@@ -400,7 +400,7 @@ data class OpenId4VPConfig(
     }
 
     constructor(
-        issuer: Issuer? = SelfIssued,
+        issuer: Issuer = SelfIssued,
         jarConfiguration: JarConfiguration = JarConfiguration.Default,
         responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
         vpConfiguration: VPConfiguration,
