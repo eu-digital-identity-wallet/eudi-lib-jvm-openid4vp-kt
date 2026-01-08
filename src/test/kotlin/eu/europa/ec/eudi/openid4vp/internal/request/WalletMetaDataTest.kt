@@ -129,12 +129,12 @@ private fun assertJarEncryption(
             val jwks = assertIs<JsonObject>(walletMetadata["jwks"]).let { JWKSet.parse(jsonSupport.encodeToString(it)) }
             assertEquals(JWKSet(ephemeralJarEncryptionJwk).toPublicJWKSet(), jwks)
 
-            val encryptionAlgorithms = assertIs<JsonArray>(walletMetadata["authorization_encryption_alg_values_supported"]).map {
+            val encryptionAlgorithms = assertIs<JsonArray>(walletMetadata["request_object_encryption_alg_values_supported"]).map {
                 JWEAlgorithm.parse(it.jsonPrimitive.content)
             }
             assertEquals(encryptionRequirement.supportedEncryptionAlgorithms, encryptionAlgorithms)
 
-            val encryptionMethods = assertIs<JsonArray>(walletMetadata["authorization_encryption_enc_values_supported"]).map {
+            val encryptionMethods = assertIs<JsonArray>(walletMetadata["request_object_encryption_enc_values_supported"]).map {
                 EncryptionMethod.parse(it.jsonPrimitive.content)
             }
             assertEquals(encryptionRequirement.supportedEncryptionMethods, encryptionMethods)

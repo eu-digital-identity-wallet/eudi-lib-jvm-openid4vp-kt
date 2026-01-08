@@ -16,7 +16,7 @@
 package eu.europa.ec.eudi.openid4vp.internal.request
 
 import com.nimbusds.jose.JWEObject
-import com.nimbusds.jose.crypto.ECDHDecrypter
+import com.nimbusds.jose.crypto.factories.DefaultJWEDecrypterFactory
 import com.nimbusds.jose.jwk.ECKey
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
@@ -197,8 +197,7 @@ private const val CONTENT_TYPE_JWT = "JWT"
 private fun Jwt.decrypt(recipientKey: ECKey): Result<Jwt> = runCatchingCancellable {
     val jwe = JWEObject.parse(this)
     require(CONTENT_TYPE_JWT == jwe.header.contentType) { "JWEObject must contain a JWT Payload" }
-
-    val decrypter = ECDHDecrypter(recipientKey)
+    val decrypter = DefaultJWEDecrypterFactory().createJWEDecrypter(jwe.header, recipientKey.toPrivateKey())
     jwe.decrypt(decrypter)
     val payload = jwe.payload
 

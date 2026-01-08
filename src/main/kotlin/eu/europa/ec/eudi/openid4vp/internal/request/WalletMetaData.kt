@@ -20,12 +20,19 @@ import com.nimbusds.jose.jwk.JWKSet
 import eu.europa.ec.eudi.openid4vp.EncryptionRequirement
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
+import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.toJsonObject
 import kotlinx.serialization.json.*
 
 private const val REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED = "request_object_signing_alg_values_supported"
 private const val JWKS = "jwks"
+
+// JAR encryption
+private const val REQUEST_OBJECT_ENCRYPTION_ALG_VALUES_SUPPORTED = "request_object_encryption_alg_values_supported"
+private const val REQUEST_OBJECT_ENCRYPTION_ENC_VALUES_SUPPORTED = "request_object_encryption_enc_values_supported"
+
+// Response encryption
 private const val AUTHORIZATION_ENCRYPTION_ALG_VALUES_SUPPORTED = "authorization_encryption_alg_values_supported"
 private const val AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED = "authorization_encryption_enc_values_supported"
 
@@ -50,12 +57,23 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, keys: List<JWK>): JsonObject =
             val jarEncryption = requestUriMethodPost.jarEncryption
             if (jarEncryption is EncryptionRequirement.Required && keys.isNotEmpty()) {
                 put(JWKS, JWKSet(keys).toJSONObject(true).toJsonObject())
-                putJsonArray(AUTHORIZATION_ENCRYPTION_ALG_VALUES_SUPPORTED) {
+                putJsonArray(REQUEST_OBJECT_ENCRYPTION_ALG_VALUES_SUPPORTED) {
                     jarEncryption.supportedEncryptionAlgorithms.forEach { alg -> add(alg.name) }
                 }
-                putJsonArray(AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED) {
+                putJsonArray(REQUEST_OBJECT_ENCRYPTION_ENC_VALUES_SUPPORTED) {
                     jarEncryption.supportedEncryptionMethods.forEach { method -> add(method.name) }
                 }
+            }
+        }
+
+        // Response Encryption
+        val responseEncryptionConfiguration = cfg.responseEncryptionConfiguration
+        if (responseEncryptionConfiguration is ResponseEncryptionConfiguration.Supported) {
+            putJsonArray(AUTHORIZATION_ENCRYPTION_ALG_VALUES_SUPPORTED) {
+                responseEncryptionConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
+            }
+            putJsonArray(AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED) {
+                responseEncryptionConfiguration.supportedMethods.forEach { method -> add(method.name) }
             }
         }
 

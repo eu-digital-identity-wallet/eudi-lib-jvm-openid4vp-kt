@@ -203,7 +203,11 @@ sealed interface ResponseEncryptionConfiguration {
     ) : ResponseEncryptionConfiguration {
         init {
             require(supportedAlgorithms.isNotEmpty()) { "At least an encryption algorithm must be provided" }
+            require(supportedAlgorithms.contains(JWEAlgorithm.ECDH_ES)) { "ECDH-ES must be supported" }
             require(supportedMethods.isNotEmpty()) { "At least an encryption method must be provided" }
+            require(supportedMethods.contains(EncryptionMethod.A128GCM) || supportedMethods.contains(EncryptionMethod.A256GCM)) {
+                "At least one of A128GCM, A256GCM must be supported"
+            }
         }
     }
 
