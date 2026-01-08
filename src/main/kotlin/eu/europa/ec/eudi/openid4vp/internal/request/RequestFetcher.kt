@@ -93,8 +93,8 @@ internal class RequestFetcher(
                 } else null
 
             val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)
-            val signedJwt = if (null != ephemeralJarEncryptionKey) {
-                jwt.decrypt(ephemeralJarEncryptionKey).getOrThrow()
+            val signedJwt = if (postOptions.jarEncryption is EncryptionRequirement.Required) {
+                jwt.decrypt(ephemeralJarEncryptionKey!!, postOptions.jarEncryption).getOrThrow()
             } else jwt
 
             return signedJwt to walletNonce
@@ -194,12 +194,20 @@ private fun HttpRequestBuilder.addAcceptContentTypeJwt() {
 
 private const val CONTENT_TYPE_JWT = "JWT"
 
-private fun Jwt.decrypt(recipientKey: ECKey): Result<Jwt> = runCatchingCancellable {
+private fun Jwt.decrypt(recipientKey: ECKey, jarEncryption: EncryptionRequirement.Required): Result<Jwt> = runCatchingCancellable {
     val jwe = JWEObject.parse(this)
     require(CONTENT_TYPE_JWT == jwe.header.contentType) { "JWEObject must contain a JWT Payload" }
+    require(jarEncryption.supportedEncryptionAlgorithms.contains(jwe.header.algorithm)) {
+        "JWEObject must contain a supported encryption algorithm"
+    }
+    require(jarEncryption.supportedEncryptionMethods.contains(jwe.header.encryptionMethod)) {
+        "JWEObject must contain a supported encryption method"
+    }
     val decrypter = DefaultJWEDecrypterFactory().createJWEDecrypter(jwe.header, recipientKey.toPrivateKey())
-    jwe.decrypt(decrypter)
-    val payload = jwe.payload
+    val payload = with(decrypter) {
+        jwe.decrypt(this)
+        jwe.payload
+    }
 
     payload.toString()
 }
