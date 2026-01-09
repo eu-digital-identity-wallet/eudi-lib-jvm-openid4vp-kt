@@ -65,41 +65,44 @@ internal class RequestFetcher(
 
         val supportedMethods =
             openId4VPConfig.jarConfiguration.supportedRequestUriMethods
+        val postOptions = supportedMethods.isPostSupported()
+
+        suspend fun useGET(): Pair<Jwt, Nonce?> {
+            ensure(supportedMethods.isGetSupported()) {
+                unsupportedRequestUriMethod(RequestUriMethod.GET)
+            }
+            return httpClient.getJAR(requestUri) to null
+        }
+
+        suspend fun usePOST(): Pair<Jwt, Nonce?> {
+            ensureNotNull(postOptions) {
+                unsupportedRequestUriMethod(RequestUriMethod.POST)
+            }
+            val walletNonce =
+                when (val nonceOption = postOptions.useWalletNonce) {
+                    is NonceOption.Use -> Nonce(nonceOption.byteLength)
+                    NonceOption.DoNotUse -> null
+                }
+            val ephemeralJarEncryptionKey = when (val jarEncryption = postOptions.jarEncryption) {
+                EncryptionRequirement.NotRequired -> null
+                is EncryptionRequirement.Required -> jarEncryption.ephemeralEncryptionKey()
+            }
+            val walletMetaData =
+                if (postOptions.includeWalletMetadata) {
+                    walletMetaData(openId4VPConfig, listOfNotNull(ephemeralJarEncryptionKey))
+                } else null
+
+            val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)
+            val signedJwt = if (null != ephemeralJarEncryptionKey) {
+                jwt.decrypt(ephemeralJarEncryptionKey).getOrThrow()
+            } else jwt
+
+            return signedJwt to walletNonce
+        }
 
         return when (requestUriMethod) {
-            null, RequestUriMethod.GET -> {
-                ensure(supportedMethods.isGetSupported()) {
-                    unsupportedRequestUriMethod(RequestUriMethod.GET)
-                }
-                httpClient.getJAR(requestUri) to null
-            }
-
-            RequestUriMethod.POST -> {
-                val postOptions =
-                    ensureNotNull(supportedMethods.isPostSupported()) {
-                        unsupportedRequestUriMethod(RequestUriMethod.POST)
-                    }
-                val walletNonce =
-                    when (val nonceOption = postOptions.useWalletNonce) {
-                        is NonceOption.Use -> Nonce(nonceOption.byteLength)
-                        NonceOption.DoNotUse -> null
-                    }
-                val ephemeralJarEncryptionKey = when (val jarEncryption = postOptions.jarEncryption) {
-                    EncryptionRequirement.NotRequired -> null
-                    is EncryptionRequirement.Required -> jarEncryption.ephemeralEncryptionKey()
-                }
-                val walletMetaData =
-                    if (postOptions.includeWalletMetadata) {
-                        walletMetaData(openId4VPConfig, listOfNotNull(ephemeralJarEncryptionKey))
-                    } else null
-
-                val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)
-                val signedJwt = if (null != ephemeralJarEncryptionKey) {
-                    jwt.decrypt(ephemeralJarEncryptionKey).getOrThrow()
-                } else jwt
-
-                signedJwt to walletNonce
-            }
+            null, RequestUriMethod.GET -> useGET()
+            RequestUriMethod.POST -> if (postOptions != null) usePOST() else useGET()
         }
     }
 }
