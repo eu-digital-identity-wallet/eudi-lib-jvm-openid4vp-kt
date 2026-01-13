@@ -89,7 +89,7 @@ internal class RequestFetcher(
             }
             val walletMetaData =
                 if (postOptions.includeWalletMetadata) {
-                    walletMetaData(openId4VPConfig, listOfNotNull(ephemeralJarEncryptionKey))
+                    walletMetaData(openId4VPConfig, request.clientId, listOfNotNull(ephemeralJarEncryptionKey))
                 } else null
 
             val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)

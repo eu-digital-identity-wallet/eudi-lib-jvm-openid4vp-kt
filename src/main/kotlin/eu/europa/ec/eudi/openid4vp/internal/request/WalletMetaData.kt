@@ -21,6 +21,7 @@ import eu.europa.ec.eudi.openid4vp.EncryptionRequirement
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
 import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration
+import eu.europa.ec.eudi.openid4vp.VerifierId
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.toJsonObject
 import kotlinx.serialization.json.*
@@ -39,7 +40,7 @@ private const val AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED = "authorization
 private const val RESPONSE_TYPES_SUPPOERTED = "response_types_supported"
 private const val RESPONSE_MODES_SUPPORTED = "response_modes_supported"
 
-internal fun walletMetaData(cfg: OpenId4VPConfig, keys: List<JWK>): JsonObject =
+internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<JWK>): JsonObject =
     buildJsonObject {
         //
         // Authorization Request signature and encryption parameters
@@ -48,8 +49,11 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, keys: List<JWK>): JsonObject =
         //
 
         // Signature
-        putJsonArray(REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED) {
-            cfg.jarConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
+        val permitsSignedRequestObjects = VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
+        if (permitsSignedRequestObjects) {
+            putJsonArray(REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED) {
+                cfg.jarConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
+            }
         }
 
         // Encryption
