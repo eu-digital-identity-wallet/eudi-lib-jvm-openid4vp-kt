@@ -120,6 +120,14 @@ enum class ClientIdPrefix {
         X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
     }
 
+    /**
+     * Indicates whether this Client Identifier Prefix permits signed Request Objects.
+     */
+    fun permitsSignedRequestObjects(): Boolean = when (this) {
+        RedirectUri -> false
+        PreRegistered, VerifierAttestation, OpenIdFederation, DecentralizedIdentifier, X509SanDns, X509Hash -> true
+    }
+
     companion object {
         fun make(s: String): ClientIdPrefix? = when (s) {
             OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED -> PreRegistered
