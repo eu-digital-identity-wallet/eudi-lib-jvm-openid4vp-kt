@@ -14,6 +14,9 @@ kover = "0.9.1"
 dependency-check = "12.1.1"
 tink = "1.18.0"
 logback = "1.5.18"
+kotlinx-datetime = "0.7.1-0.6.x-compat"
+cose-java = "1.1.0"
+waltid-mdoc-credentials = "0.11.0"
 
 [libraries]
 fasterxml-jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "fasterxml-jackson" }
@@ -31,6 +34,9 @@ bouncy-castle = { module = "org.bouncycastle:bcpkix-jdk18on", version.ref = "bou
 tink = { module = "com.google.crypto.tink:tink", version.ref = "tink" }
 ktor-client-logging = { module = "io.ktor:ktor-client-logging", version.ref = "ktor" }
 logback-classic = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+kotlinx-datetime = { module = "org.jetbrains.kotlinx:kotlinx-datetime", version.ref = "kotlinx-datetime"}
+cose-java = { module = "com.augustcellars.cose:cose-java", version.ref = "cose-java"}
+waltid-mdoc-credentials = { module = "id.walt.mdoc-credentials:waltid-mdoc-credentials", version.ref = "waltid-mdoc-credentials" }
 
 [plugins]
 kotlin-jvm = { id = "org.jetbrains.kotlin.jvm", version.ref = "kotlin" }
