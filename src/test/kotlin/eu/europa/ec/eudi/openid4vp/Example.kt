@@ -389,9 +389,9 @@ private class Wallet(
             openID4VPHandover,
         ).toDataElement()
 
-        val deviceNameSpaces = EncodedCBORElement(MapElement(emptyMap()).toCBOR())
+        val deviceNameSpaces = EncodedCBORElement(Cbor.encodeToByteArray(MapElement(emptyMap())))
         val deviceAuthentication = DeviceAuthentication(sessionTranscript, "eu.europa.ec.eudi.pid.1", deviceNameSpaces)
-        val deviceAuthenticationBytes = EncodedCBORElement(deviceAuthentication.toCBOR())
+        val deviceAuthenticationBytes = EncodedCBORElement(Cbor.encodeToByteArray(deviceAuthentication))
 
         val deviceKey = ECKey.parse(loadResource("/example/mso_mdoc_pid-devicekey.json"))
         val cryptoProvider = SimpleCOSECryptoProvider(
