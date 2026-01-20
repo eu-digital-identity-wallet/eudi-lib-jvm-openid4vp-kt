@@ -15,6 +15,8 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
+import COSE.AlgorithmID
+import cbor.Cbor
 import com.nimbusds.jose.*
 import com.nimbusds.jose.crypto.ECDSASigner
 import com.nimbusds.jose.jwk.Curve
@@ -26,6 +28,18 @@ import com.nimbusds.openid.connect.sdk.Nonce
 import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.*
 import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
+import id.walt.mdoc.COSECryptoProviderKeyInfo
+import id.walt.mdoc.SimpleCOSECryptoProvider
+import id.walt.mdoc.dataelement.EncodedCBORElement
+import id.walt.mdoc.dataelement.MapElement
+import id.walt.mdoc.dataelement.NullElement
+import id.walt.mdoc.dataelement.toDataElement
+import id.walt.mdoc.dataretrieval.DeviceResponse
+import id.walt.mdoc.devicesigned.DeviceAuth
+import id.walt.mdoc.devicesigned.DeviceSigned
+import id.walt.mdoc.doc.MDoc
+import id.walt.mdoc.issuersigned.IssuerSigned
+import id.walt.mdoc.mdocauth.DeviceAuthentication
 import io.ktor.client.*
 import io.ktor.client.call.*
 import io.ktor.client.request.*
@@ -33,6 +47,8 @@ import io.ktor.http.*
 import kotlinx.coroutines.*
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.decodeFromByteArray
+import kotlinx.serialization.encodeToByteArray
 import kotlinx.serialization.json.*
 import java.net.URI
 import java.net.URL
@@ -41,6 +57,7 @@ import java.security.MessageDigest
 import java.security.cert.X509Certificate
 import java.time.Clock
 import java.util.*
+import kotlin.io.encoding.Base64
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL as DCQLQuery
 
 /**
@@ -273,7 +290,12 @@ private class Wallet(
             check(1 == query.credentials.value.size) { "found more than 1 credentials" }
             val credential = query.credentials.value.first()
             val verifiablePresentation = when (val format = credential.format.value) {
-                "mso_mdoc" -> VerifiablePresentation.Generic(loadResource("/example/mso_mdoc_pid-deviceresponse.txt"))
+                "mso_mdoc" -> prepareMsoMdocVerifiablePresentation(
+                    request.client,
+                    request.nonce,
+                    request.responseEncryptionSpecification,
+                    request.responseMode,
+                )
                 "dc+sd-jwt" -> prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
                 else -> error("unsupported format $format")
             }
@@ -329,6 +351,82 @@ private class Wallet(
             SignedJWT(header, claims).apply { sign(ECDSASigner(holderKey)) }
         }
         return VerifiablePresentation.Generic("$sdJwtVc${keyBindingJwt.serialize()}")
+    }
+
+    private fun prepareMsoMdocVerifiablePresentation(
+        audience: Client,
+        nonce: String,
+        responseEncryptionSpecification: ResponseEncryptionSpecification?,
+        responseMode: ResponseMode,
+    ): VerifiablePresentation.Generic {
+        val ephemeralEncryptionKey = responseEncryptionSpecification?.recipientKey
+
+        val responseUri = when (responseMode) {
+            is ResponseMode.DirectPost -> responseMode.responseURI.toString()
+            is ResponseMode.DirectPostJwt -> responseMode.responseURI.toString()
+            is ResponseMode.Fragment -> responseMode.redirectUri.toString()
+            is ResponseMode.FragmentJwt -> responseMode.redirectUri.toString()
+            is ResponseMode.Query -> responseMode.redirectUri.toString()
+            is ResponseMode.QueryJwt -> responseMode.redirectUri.toString()
+        }
+
+        val openID4VPHandoverInfo = listOf(
+            audience.id.clientId.toDataElement(),
+            nonce.toDataElement(),
+            ephemeralEncryptionKey?.computeThumbprint()?.decode()?.toDataElement() ?: NullElement(),
+            responseUri.toDataElement(),
+        ).toDataElement()
+        val openID4VPHandoverInfoBytes = Cbor.encodeToByteArray(openID4VPHandoverInfo)
+        val openID4VPHandoverInfoHash = MessageDigest.getInstance("SHA-256").digest(openID4VPHandoverInfoBytes)
+        val openID4VPHandover = listOf(
+            "OpenID4VPHandover".toDataElement(),
+            openID4VPHandoverInfoHash.toDataElement(),
+        ).toDataElement()
+
+        val sessionTranscript = listOf(
+            NullElement(),
+            NullElement(),
+            openID4VPHandover,
+        ).toDataElement()
+
+        val deviceNameSpaces = EncodedCBORElement(Cbor.encodeToByteArray(MapElement(emptyMap())))
+        val deviceAuthentication = DeviceAuthentication(sessionTranscript, "eu.europa.ec.eudi.pid.1", deviceNameSpaces)
+        val deviceAuthenticationBytes = EncodedCBORElement(Cbor.encodeToByteArray(deviceAuthentication))
+
+        val deviceKey = ECKey.parse(loadResource("/example/mso_mdoc_pid-devicekey.json"))
+        val cryptoProvider = SimpleCOSECryptoProvider(
+            listOf(
+                COSECryptoProviderKeyInfo(
+                    keyID = "device",
+                    algorithmID = AlgorithmID.ECDSA_256,
+                    publicKey = deviceKey.toECPublicKey(),
+                    privateKey = deviceKey.toECPrivateKey(),
+                    x5Chain = emptyList(),
+                    trustedRootCAs = emptyList(),
+                ),
+            ),
+        )
+        val deviceSignature = cryptoProvider.sign1(Cbor.encodeToByteArray(deviceAuthenticationBytes), null, null, "device")
+        val deviceSigned = DeviceSigned(
+            nameSpaces = deviceNameSpaces,
+            deviceAuth = DeviceAuth(
+                deviceMac = null,
+                deviceSignature = deviceSignature.detachPayload(),
+            ),
+        )
+
+        val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT_OPTIONAL)
+        val issuerSigned = Cbor.decodeFromByteArray<IssuerSigned>(base64.decode(loadResource("/example/mso_mdoc_pid-issuersigned.txt")))
+
+        val document = MDoc(
+            docType = "eu.europa.ec.eudi.pid.1".toDataElement(),
+            issuerSigned = issuerSigned,
+            deviceSigned = deviceSigned,
+            errors = null,
+        )
+        val deviceResponse = DeviceResponse(listOf(document))
+
+        return VerifiablePresentation.Generic(base64.encode(Cbor.encodeToByteArray(deviceResponse)))
     }
 
     companion object {

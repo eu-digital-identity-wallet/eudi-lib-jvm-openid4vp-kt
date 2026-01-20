@@ -26,6 +26,12 @@ repositories {
         url = uri("https://s01.oss.sonatype.org/content/repositories/snapshots/")
         mavenContent { snapshotsOnly() }
     }
+    maven {
+        url = uri("https://maven.waltid.dev/releases")
+        mavenContent {
+            releasesOnly()
+        }
+    }
 }
 
 dependencies {
@@ -47,6 +53,9 @@ dependencies {
     testImplementation(libs.tink) {
         because("Enable usage of EncryptionMethod XC20P in Example")
     }
+    testImplementation(libs.kotlinx.datetime)
+    testImplementation(libs.cose.java)
+    testImplementation(libs.waltid.mdoc.credentials)
 }
 
 java {
