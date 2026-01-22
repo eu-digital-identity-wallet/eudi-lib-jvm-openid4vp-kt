@@ -170,12 +170,28 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
         }
     }
 
-    private fun originalClientIdAndPrefix(requestObject: UnvalidatedRequestObject): Pair<OriginalClientId, SupportedClientIdPrefix> {
-        val clientId = ensureNotNull(requestObject.clientId) { RequestValidationError.MissingClientId.asException() }
-        val verifierId =
-            VerifierId.parse(clientId).getOrElse { throw invalidPrefix("Invalid client_id: ${it.message}") }
+    private fun originalClientIdAndPrefix(
+        requestObject: UnvalidatedRequestObject,
+    ): Pair<OriginalClientId, SupportedClientIdPrefix> {
+        val clientId = ensureNotNull(requestObject.clientId) {
+            RequestValidationError.MissingClientId.asException()
+        }
+
+        val preregistered = openId4VPConfig.supportedClientIdPrefixes
+            .firstOrNull { it is Preregistered } as? Preregistered
+
+        val verifierId = VerifierId.parse(clientId).getOrElse { error ->
+            ensureNotNull(preregistered) { invalidPrefix("Invalid client_id: ${error.message}") }
+            return clientId to preregistered
+        }
+
         val supportedClientIdPrefix = openId4VPConfig.supportedClientIdPrefix(verifierId.prefix)
-        ensureNotNull(supportedClientIdPrefix) { RequestValidationError.UnsupportedClientIdPrefix.asException() }
+            ?: preregistered?.let { return clientId to it }
+
+        ensureNotNull(supportedClientIdPrefix) {
+            RequestValidationError.UnsupportedClientIdPrefix.asException()
+        }
+
         return verifierId.originalClientId to supportedClientIdPrefix
     }
 
