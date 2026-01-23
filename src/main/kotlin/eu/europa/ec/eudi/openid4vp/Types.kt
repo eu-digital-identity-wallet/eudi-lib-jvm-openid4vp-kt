@@ -110,16 +110,6 @@ enum class ClientIdPrefix {
 
     ;
 
-    fun value(): String = when (this) {
-        PreRegistered -> OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED
-        RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
-        OpenIdFederation -> OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION
-        DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
-        VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
-        X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
-        X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
-    }
-
     /**
      * Indicates whether this Client Identifier Prefix permits signed Request Objects.
      */
@@ -130,7 +120,6 @@ enum class ClientIdPrefix {
 
     companion object {
         fun make(s: String): ClientIdPrefix? = when (s) {
-            OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED -> PreRegistered
             OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI -> RedirectUri
             OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION -> OpenIdFederation
             OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER -> DecentralizedIdentifier
@@ -181,14 +170,14 @@ data class VerifierId(
     companion object {
         fun parse(clientId: String): Result<VerifierId> = runCatchingCancellable {
             fun invalid(message: String): Nothing = throw IllegalArgumentException(message)
+            fun preRegistered() = VerifierId(ClientIdPrefix.PreRegistered, clientId)
 
             if (OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR !in clientId) {
-                VerifierId(ClientIdPrefix.PreRegistered, clientId)
+                preRegistered()
             } else {
                 val parts = clientId.split(OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR, limit = 2)
                 val originalClientId = parts[1]
-                val prefix = ClientIdPrefix.make(parts[0]) ?: invalid("'$clientId' does not contain a valid Client ID prefix")
-                when (prefix) {
+                when (val prefix = ClientIdPrefix.make(parts[0])) {
                     ClientIdPrefix.PreRegistered -> invalid("'${ClientIdPrefix.PreRegistered}' cannot be used as a Client ID prefix")
                     ClientIdPrefix.RedirectUri -> VerifierId(prefix, originalClientId)
                     ClientIdPrefix.OpenIdFederation -> VerifierId(prefix, originalClientId)
@@ -196,6 +185,7 @@ data class VerifierId(
                     ClientIdPrefix.VerifierAttestation -> VerifierId(prefix, originalClientId)
                     ClientIdPrefix.X509SanDns -> VerifierId(prefix, originalClientId)
                     ClientIdPrefix.X509Hash -> VerifierId(prefix, originalClientId)
+                    null -> preRegistered()
                 }
             }
         }

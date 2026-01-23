@@ -17,11 +17,8 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
-import eu.europa.ec.eudi.openid4vp.EncryptionRequirement
-import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig
-import eu.europa.ec.eudi.openid4vp.OpenId4VPSpec
-import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration
-import eu.europa.ec.eudi.openid4vp.VerifierId
+import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.ClientIdPrefix.*
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.toJsonObject
 import kotlinx.serialization.json.*
@@ -49,7 +46,8 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<J
         //
 
         // Signature
-        val permitsSignedRequestObjects = VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
+        val permitsSignedRequestObjects =
+            VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
         if (permitsSignedRequestObjects) {
             putJsonArray(REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED) {
                 cfg.jarConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
@@ -87,7 +85,7 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<J
         put(OpenId4VPSpec.VP_FORMATS_SUPPORTED, jsonSupport.encodeToJsonElement(cfg.vpConfiguration.vpFormatsSupported))
         putJsonArray(OpenId4VPSpec.CLIENT_ID_PREFIXES_SUPPORTED) {
             cfg.supportedClientIdPrefixes.forEach { supportedClientIdPrefix ->
-                add(supportedClientIdPrefix.prefix().value())
+                add(supportedClientIdPrefix.prefix().metadataValue)
             }
         }
         putJsonArray(RESPONSE_TYPES_SUPPOERTED) {
@@ -100,4 +98,15 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<J
             add("direct_post")
             add("direct_post.jwt")
         }
+    }
+
+internal val ClientIdPrefix.metadataValue: String
+    get() = when (this) {
+        PreRegistered -> OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED
+        RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
+        OpenIdFederation -> OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION
+        DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
+        VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
+        X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
+        X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
     }

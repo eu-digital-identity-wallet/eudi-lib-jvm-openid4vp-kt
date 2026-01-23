@@ -70,18 +70,6 @@ class ClientAuthenticatorTest {
                 clientAuthenticator.authenticateClient(request)
             }
         }
-
-        @Test
-        fun `if client_id prefix is invalid, authentication fails`() = runTest {
-            val request = UnvalidatedRequestObject(
-                clientId = "bar:foo",
-                responseMode = "bar",
-            ).unsigned()
-
-            assertFailsWithError<RequestValidationError.InvalidClientIdPrefix> {
-                clientAuthenticator.authenticateClient(request)
-            }
-        }
     }
 
     @DisplayName("when handling a request with `redirect_uri` prefix")
@@ -126,6 +114,62 @@ class ClientAuthenticatorTest {
                 clientAuthenticator.authenticateClient(request)
             }
             assertEquals("RedirectUri cannot be used in signed request", error.value)
+        }
+    }
+
+    @DisplayName("when handling a request with pre-registered client")
+    @Nested
+    inner class ClientAuthenticatorWhenUsingPreRegisteredClientTest {
+        private val algAndKey = randomKey()
+        private val preRegisteredClient = PreregisteredClient(
+            "testPreRegistered",
+            "Test Pre-Registered Client",
+            algAndKey.first to JwkSetSource.ByValue(Json.decodeFromString(algAndKey.second.toString())),
+        )
+        private val preRegisteredClientFooBar = PreregisteredClient(
+            "foo:bar",
+            "Pre-Registered Client with : in client_id",
+            algAndKey.first to JwkSetSource.ByValue(Json.decodeFromString(algAndKey.second.toString())),
+        )
+        private val cfg = OpenId4VPConfig(
+            supportedClientIdPrefixes = listOf(
+                SupportedClientIdPrefix.RedirectUri,
+                SupportedClientIdPrefix.Preregistered(preRegisteredClient, preRegisteredClientFooBar),
+            ),
+            vpConfiguration = VPConfiguration(
+                vpFormatsSupported = VpFormatsSupported(
+                    VpFormatsSupported.SdJwtVc.HAIP,
+                    VpFormatsSupported.MsoMdoc(
+                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    ),
+                ),
+            ),
+        )
+        private val clientAuthenticator = ClientAuthenticator(cfg)
+
+        @Test
+        fun `if request is signed by a pre-registered client, authentication succeeds`() =
+            runTest {
+                val (alg, key) = algAndKey
+                val request = UnvalidatedRequestObject(
+                    clientId = "testPreRegistered",
+                ).signed(alg, key)
+
+                val client = clientAuthenticator.authenticateClient(request)
+                assertEquals(AuthenticatedClient.Preregistered(preRegisteredClient), client)
+            }
+
+        @Test
+        fun `if client_id contains colon char and is not one of the known prefixes, fallback to pre-registered client prefix`() = runTest {
+            val (alg, key) = algAndKey
+            val request = UnvalidatedRequestObject(
+                clientId = "foo:bar",
+            ).signed(alg, key)
+
+            val authenticateClient =
+                assertIs<AuthenticatedClient.Preregistered>(clientAuthenticator.authenticateClient(request))
+            assertEquals(preRegisteredClientFooBar, authenticateClient.preregisteredClient)
         }
     }
 
