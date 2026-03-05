@@ -217,9 +217,12 @@ sealed interface NonceOption {
     data object DoNotUse : NonceOption
 
     @JvmInline
-    value class Use(val byteLength: Int = 32) : NonceOption {
+    value class Use(val byteLength: Int = MINIMUM_NONCE_LENGTH) : NonceOption {
         init {
-            require(byteLength > 1) { "Byte length should be greater than 1" }
+            require(byteLength >= MINIMUM_NONCE_LENGTH) { "Byte length should be at least $MINIMUM_NONCE_LENGTH" }
+        }
+        companion object {
+            const val MINIMUM_NONCE_LENGTH: Int = 32
         }
     }
 }
