@@ -469,11 +469,11 @@ data class ClaimsQuery(
         ): ClaimsQuery = mdoc(id, ClaimPath.claim(namespace).claim(claimName), values, intentToRetain)
 
         fun ensureMsoMdoc(claimsQuery: ClaimsQuery) {
-            require(2 == claimsQuery.path.value.size) {
-                "ClaimPaths for MSO MDoc based formats must have exactly two elements"
+            require(claimsQuery.path.value.size >= 2) {
+                "ClaimPaths for MSO MDoc based formats must have at least two elements (namespace and element identifier)"
             }
-            require(claimsQuery.path.value.all { it is ClaimPathElement.Claim }) {
-                "ClaimPaths for MSO MDoc based formats must contain only Claim ClaimPathElements"
+            require(claimsQuery.path.value.take(2).all { it is ClaimPathElement.Claim }) {
+                "The first two elements of an MSO MDoc ClaimPath (namespace and element identifier) must be Claim elements"
             }
         }
 
