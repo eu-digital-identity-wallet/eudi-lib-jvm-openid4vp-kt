@@ -154,7 +154,7 @@ internal sealed interface UnvalidatedRequest {
                 }
 
                 !requestUriValue.isNullOrEmpty() -> {
-                    val requestUri = requestUriValue.asURL().getOrThrow()
+                    val requestUri = requestUriValue.asHttpsURL().getOrThrow()
                     PassByReference(clientId(), requestUri, requestUriMethod)
                 }
 

@@ -113,7 +113,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
                     invalidPrefix("${clientIdPrefix.prefix()} cannot be used in signed request")
                 }
                 val originalClientIdAsUri =
-                    originalClientId.asURI { RequestValidationError.InvalidClientId.asException() }.getOrThrow()
+                    originalClientId.asHttpsURI { RequestValidationError.InvalidClientId.asException() }.getOrThrow()
                 AuthenticatedClient.RedirectUri(originalClientIdAsUri)
             }
 
