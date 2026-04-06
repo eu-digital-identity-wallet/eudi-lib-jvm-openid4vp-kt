@@ -27,7 +27,7 @@ import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.dcql.*
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
-import eu.europa.ec.eudi.openid4vp.internal.request.asURL
+import eu.europa.ec.eudi.openid4vp.internal.request.asHttpsURL
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonObject
@@ -102,7 +102,7 @@ class AuthorizationResponseBuilderTest {
     @Test
     fun `when direct_post jwt, builder should return DirectPostJwt with response encryption parameters of correct type`() = runTest {
         fun test(state: String? = null) {
-            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow())
+            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
             val query = DCQL(
                 credentials = Credentials(
                     CredentialQuery.sdJwtVc(

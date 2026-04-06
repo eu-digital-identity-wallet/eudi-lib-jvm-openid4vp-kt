@@ -22,12 +22,34 @@ import java.net.URL
 
 /**
  * Convenient method for parsing a string into a [URL]
+ * Also, enforcing [URL] to be HTTPS
  */
-internal fun String.asURL(onError: (Throwable) -> Throwable = { it }): Result<URL> =
-    runCatchingCancellable { URL(this) }.mapError(onError)
+internal fun String.asHttpsURL(onError: (Throwable) -> Throwable = { it }): Result<URL> =
+    runCatchingCancellable {
+        val url = URL(this)
+        url.requireHttps().getOrThrow()
+    }.mapError(onError)
 
 /**
  * Convenient method for parsing a string into a [URI]
+ * Also, enforcing [URL] to be HTTPS
  */
-internal fun String.asURI(onError: (Throwable) -> Throwable = { it }): Result<URI> =
-    runCatchingCancellable { URI(this) }.mapError(onError)
+internal fun String.asHttpsURI(onError: (Throwable) -> Throwable = { it }): Result<URI> =
+    runCatchingCancellable {
+        val uri = URI(this)
+        uri.requireHttps().getOrThrow()
+    }.mapError(onError)
+
+private fun URL.requireHttps(onError: (Throwable) -> Throwable = { it }): Result<URL> =
+    if (protocol.equals("https", ignoreCase = true)) {
+        Result.success(this)
+    } else {
+        Result.failure(onError(IllegalArgumentException("URL must use HTTPS: $this")))
+    }
+
+private fun URI.requireHttps(onError: (Throwable) -> Throwable = { it }): Result<URI> =
+    if (scheme.equals("https", ignoreCase = true)) {
+        Result.success(this)
+    } else {
+        Result.failure(onError(IllegalArgumentException("URL must use HTTPS: $this")))
+    }

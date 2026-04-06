@@ -29,8 +29,8 @@ import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.dcql.QueryId
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
-import eu.europa.ec.eudi.openid4vp.internal.request.asURI
-import eu.europa.ec.eudi.openid4vp.internal.request.asURL
+import eu.europa.ec.eudi.openid4vp.internal.request.asHttpsURI
+import eu.europa.ec.eudi.openid4vp.internal.request.asHttpsURL
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationRequestErrorCode.INVALID_REQUEST_URI_METHOD
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherTest.Verifier
 import io.ktor.client.plugins.contentnegotiation.*
@@ -109,7 +109,7 @@ class AuthorizationResponseDispatcherTest {
     @Test
     fun `dispatch vp_token with direct post`() = runTest {
         fun test(state: String? = null) {
-            val responseMode = ResponseMode.DirectPost("https://respond.here".asURL().getOrThrow())
+            val responseMode = ResponseMode.DirectPost("https://respond.here".asHttpsURL().getOrThrow())
             val query = Json.decodeFromStream<DCQL>(checkNotNull(load("dcql/mDL-example.json")))
             val validated = assertDoesNotThrow {
                 ClientMetaDataValidator.validateClientMetaData(
@@ -199,7 +199,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with direct post`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.DirectPost("https://respond.here".asURL().getOrThrow()),
+                    responseMode = ResponseMode.DirectPost("https://respond.here".asHttpsURL().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,
@@ -255,7 +255,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with direct post jwt`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow()),
+                    responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,
@@ -320,7 +320,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with query`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.Query("https://respond.here".asURI().getOrThrow()),
+                    responseMode = ResponseMode.Query("https://respond.here".asHttpsURI().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,
@@ -356,7 +356,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with query jwt`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.QueryJwt("https://respond.here".asURI().getOrThrow()),
+                    responseMode = ResponseMode.QueryJwt("https://respond.here".asHttpsURI().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,
@@ -401,7 +401,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with fragment`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.Fragment("https://respond.here".asURI().getOrThrow()),
+                    responseMode = ResponseMode.Fragment("https://respond.here".asHttpsURI().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,
@@ -436,7 +436,7 @@ class AuthorizationResponseDispatcherTest {
         fun `with fragment jwt`() = runTest {
             fun test(state: String? = null) {
                 val errorDispatchDetails = ErrorDispatchDetails(
-                    responseMode = ResponseMode.FragmentJwt("https://respond.here".asURI().getOrThrow()),
+                    responseMode = ResponseMode.FragmentJwt("https://respond.here".asHttpsURI().getOrThrow()),
                     state = state,
                     nonce = null,
                     clientId = null,

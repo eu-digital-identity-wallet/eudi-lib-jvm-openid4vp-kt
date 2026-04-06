@@ -75,7 +75,7 @@ class ClientAuthenticatorTest {
     @DisplayName("when handling a request with `redirect_uri` prefix")
     @Nested
     inner class ClientAuthenticatorWhenUsingRedirectUriTest {
-        private val clientId = URI.create("http://localhost:8080")
+        private val clientId = URI.create("https://localhost:8080")
         private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
@@ -114,6 +114,16 @@ class ClientAuthenticatorTest {
                 clientAuthenticator.authenticateClient(request)
             }
             assertEquals("RedirectUri cannot be used in signed request", error.value)
+        }
+
+        @Test
+        fun `if  redirect_uri is insecure, authentication fails`() = runTest {
+            val httpClientId = URI.create("http://localhost:8080")
+            val request = UnvalidatedRequestObject(
+                clientId = "redirect_uri:$httpClientId",
+            ).unsigned()
+
+            assertThrows<AuthorizationRequestException> { clientAuthenticator.authenticateClient(request) }
         }
     }
 
@@ -161,16 +171,17 @@ class ClientAuthenticatorTest {
             }
 
         @Test
-        fun `if client_id contains colon char and is not one of the known prefixes, fallback to pre-registered client prefix`() = runTest {
-            val (alg, key) = algAndKey
-            val request = UnvalidatedRequestObject(
-                clientId = "foo:bar",
-            ).signed(alg, key)
+        fun `if client_id contains colon char and is not one of the known prefixes, fallback to pre-registered client prefix`() =
+            runTest {
+                val (alg, key) = algAndKey
+                val request = UnvalidatedRequestObject(
+                    clientId = "foo:bar",
+                ).signed(alg, key)
 
-            val authenticateClient =
-                assertIs<AuthenticatedClient.Preregistered>(clientAuthenticator.authenticateClient(request))
-            assertEquals(preRegisteredClientFooBar, authenticateClient.preregisteredClient)
-        }
+                val authenticateClient =
+                    assertIs<AuthenticatedClient.Preregistered>(clientAuthenticator.authenticateClient(request))
+                assertEquals(preRegisteredClientFooBar, authenticateClient.preregisteredClient)
+            }
     }
 
     @DisplayName("when handling a request with `decentralized_identifier` prefix")

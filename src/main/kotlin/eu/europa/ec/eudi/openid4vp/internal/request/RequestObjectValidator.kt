@@ -164,7 +164,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
             ensure(unvalidated.responseUri == null) { ResponseUriMustNotBeProvided.asException() }
             // Redirect URI can be omitted in case of RedirectURI
             // and use clientId instead
-            val redirectUri = unvalidated.redirectUri?.asURI { InvalidRedirectUri.asException() }?.getOrThrow()
+            val redirectUri = unvalidated.redirectUri?.asHttpsURI { InvalidRedirectUri.asException() }?.getOrThrow()
             return when (client) {
                 is AuthenticatedClient.RedirectUri -> {
                     ensure(redirectUri == null || client.clientId == redirectUri) {
@@ -181,7 +181,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
             ensure(unvalidated.redirectUri == null) { RedirectUriMustNotBeProvided.asException() }
             val uri = unvalidated.responseUri
             ensureNotNull(uri) { MissingResponseUri.asException() }
-            return uri.asURL { InvalidResponseUri.asException() }.getOrThrow()
+            return uri.asHttpsURL { InvalidResponseUri.asException() }.getOrThrow()
         }
 
         val responseMode = when (unvalidated.responseMode) {

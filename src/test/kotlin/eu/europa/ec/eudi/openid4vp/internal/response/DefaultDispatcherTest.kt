@@ -33,7 +33,7 @@ import eu.europa.ec.eudi.openid4vp.dcql.*
 import eu.europa.ec.eudi.openid4vp.dcql.ClaimPathElement.Claim
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
-import eu.europa.ec.eudi.openid4vp.internal.request.asURL
+import eu.europa.ec.eudi.openid4vp.internal.request.asHttpsURL
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherTest.Verifier.assertIsJwtEncryptedWithVerifiersPublicKey
 import io.ktor.client.*
 import io.ktor.client.engine.mock.*
@@ -228,7 +228,7 @@ class DefaultDispatcherTest {
         fun `if response type direct_post jwt, JWE should be returned if only encryption info specified`() = runTest {
             val verifierRequest = Verifier.createOpenId4VPRequest(
                 Verifier.metaDataRequestingEncryptedResponse,
-                ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow()),
+                ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
             )
 
             suspend fun test(
@@ -277,7 +277,7 @@ class DefaultDispatcherTest {
             runTest {
                 val verifierRequest = Verifier.createOpenId4VPRequest(
                     Verifier.metaDataRequestingEncryptedResponse,
-                    ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow()),
+                    ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
                 )
 
                 val negativeConsensus = Consensus.NegativeConsensus
@@ -303,7 +303,7 @@ class DefaultDispatcherTest {
         @Test
         fun `support vp_token with multiple verifiable presentations`() = runTest {
             suspend fun test(verifiablePresentations: VerifiablePresentations, redirectUri: URI? = null) {
-                val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow())
+                val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
                 val resolvedRequest =
                     Verifier.createOpenId4VPRequest(Verifier.metaDataRequestingEncryptedResponse, responseMode)
                 val vpTokenConsensus = Consensus.PositiveConsensus(
@@ -358,7 +358,7 @@ class DefaultDispatcherTest {
                 assertEquals(expectedOutcome, outcome)
             }
 
-            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow())
+            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
             test(
                 createOpenID4VPRequestWithDCQL(Verifier.metaDataRequestingEncryptedResponse, responseMode),
                 Consensus.PositiveConsensus(dcqlVpTokenWithGenericPresentation()),
@@ -367,7 +367,7 @@ class DefaultDispatcherTest {
 
         @Test
         fun `unencrypted errors are sent when using direct_post_jwt`() = runTest {
-            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asURL().getOrThrow())
+            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
             val error = ResolutionError.UnknownScope(Scope.OpenId)
             val state = genState()
             val errorDispatchDetails = ErrorDispatchDetails(
@@ -592,7 +592,7 @@ class DefaultDispatcherTest {
                 suspend fun test(state: String? = null, asserter: URI.(URI.() -> Unit) -> Unit) {
                     val verifierRequest = Verifier.createOpenId4VPRequest(
                         Verifier.metaDataRequestingEncryptedResponse,
-                        ResponseMode.QueryJwt("https://respond.here".asURL().getOrThrow().toURI()),
+                        ResponseMode.QueryJwt("https://respond.here".asHttpsURL().getOrThrow().toURI()),
                         state,
                     )
 
@@ -725,7 +725,7 @@ class DefaultDispatcherTest {
                 suspend fun test(state: String? = null, asserter: URI.(URI.() -> Unit) -> Unit) {
                     val verifierRequest = Verifier.createOpenId4VPRequest(
                         Verifier.metaDataRequestingEncryptedResponse,
-                        ResponseMode.FragmentJwt("https://respond.here".asURL().getOrThrow().toURI()),
+                        ResponseMode.FragmentJwt("https://respond.here".asHttpsURL().getOrThrow().toURI()),
                         state,
                     )
 
