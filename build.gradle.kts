@@ -2,7 +2,6 @@ import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinJvm
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
-import org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension
 import java.net.URI
 
 object Meta {
@@ -39,6 +38,7 @@ dependencies {
     api(libs.ktor.client.core)
     api(libs.ktor.client.content.negotiation)
     api(libs.ktor.client.serialization)
+    api(libs.kotlinx.serialization.json)
     api(libs.ktor.serialization.kotlinx.json)
     implementation(libs.bouncy.castle)
     testImplementation(kotlin("test"))
@@ -68,7 +68,7 @@ kotlin {
         vendor = JvmVendorSpec.ADOPTIUM
     }
     compilerOptions {
-        apiVersion = KotlinVersion.KOTLIN_2_1
+        apiVersion = KotlinVersion.DEFAULT
         optIn = listOf(
             "kotlinx.serialization.ExperimentalSerializationApi",
             "kotlin.contracts.ExperimentalContracts",
@@ -90,12 +90,8 @@ spotless {
     }
 }
 
-testing {
-    suites {
-        val test by getting(JvmTestSuite::class) {
-            useJUnitJupiter()
-        }
-    }
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.jar {
@@ -145,9 +141,10 @@ mavenPublishing {
     }
 }
 
-val nvdApiKey: String? = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString()
-val dependencyCheckExtension = extensions.findByType(DependencyCheckExtension::class.java)
-dependencyCheckExtension?.apply {
+dependencyCheck {
     formats = mutableListOf("XML", "HTML")
-    nvd.apiKey = nvdApiKey ?: ""
+
+    nvd {
+        apiKey = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString() ?: ""
+    }
 }
