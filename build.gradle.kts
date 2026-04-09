@@ -2,7 +2,6 @@ import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinJvm
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
-import org.owasp.dependencycheck.gradle.extension.DependencyCheckExtension
 import java.net.URI
 
 object Meta {
@@ -91,12 +90,8 @@ spotless {
     }
 }
 
-testing {
-    suites {
-        val test by getting(JvmTestSuite::class) {
-            useJUnitJupiter()
-        }
-    }
+tasks.test {
+    useJUnitPlatform()
 }
 
 tasks.jar {
@@ -146,9 +141,10 @@ mavenPublishing {
     }
 }
 
-val nvdApiKey: String? = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString()
-val dependencyCheckExtension = extensions.findByType(DependencyCheckExtension::class.java)
-dependencyCheckExtension?.apply {
+dependencyCheck {
     formats = mutableListOf("XML", "HTML")
-    nvd.apiKey = nvdApiKey ?: ""
+
+    nvd {
+        apiKey = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString() ?: ""
+    }
 }
