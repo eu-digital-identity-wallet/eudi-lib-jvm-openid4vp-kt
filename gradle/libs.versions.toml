@@ -1,8 +1,8 @@
 [versions]
 java = "17"
-kotlin = "2.2.21"
+kotlin = "2.3.20"
 coroutines = "1.10.2"
-ktor = "3.3.3"
+ktor = "3.4.2"
 nimbus-sdk = "11.37"
 fasterxml-jackson = "2.18.2"
 bouncyCastle = "1.83"
@@ -17,7 +17,7 @@ logback = "1.5.32"
 kotlinx-datetime = "0.7.1-0.6.x-compat"
 cose-java = "1.1.0"
 waltid-mdoc-credentials = "0.11.0"
-kotlinx-serialization = "1.9.0"
+kotlinx-serialization = "1.11.0"
 
 [libraries]
 fasterxml-jackson-module-kotlin = { module = "com.fasterxml.jackson.module:jackson-module-kotlin", version.ref = "fasterxml-jackson" }
