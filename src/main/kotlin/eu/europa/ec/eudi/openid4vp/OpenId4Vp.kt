@@ -39,7 +39,7 @@ sealed interface OpenId4Vp {
 
     companion object {
 
-        fun overHttp(
+        fun overRedirects(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
         ): OverHttp {
@@ -52,7 +52,7 @@ sealed interface OpenId4Vp {
                 OverHttp {}
         }
 
-        fun overDcAPI(
+        fun overDcApi(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
         ): OverDcAPI {

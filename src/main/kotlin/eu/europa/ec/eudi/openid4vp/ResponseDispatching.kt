@@ -15,7 +15,6 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject.*
 import kotlinx.serialization.json.JsonObject
 import java.net.URI
 
@@ -160,5 +159,9 @@ interface DispatcherOverDCApi {
         request: ResolvedRequestObject,
         consensus: Consensus,
         encryptionParameters: EncryptionParameters? = null,
+    ): JsonObject
+
+    fun assembleErrorResponse(
+        error: AuthorizationRequestError,
     ): JsonObject
 }

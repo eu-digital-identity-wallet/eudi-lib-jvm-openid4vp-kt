@@ -15,6 +15,7 @@
  */
 package eu.europa.ec.eudi.openid4vp.internal.response
 
+import eu.europa.ec.eudi.openid4vp.AuthorizationRequestError
 import eu.europa.ec.eudi.openid4vp.Consensus
 import eu.europa.ec.eudi.openid4vp.DispatcherOverDCApi
 import eu.europa.ec.eudi.openid4vp.EncryptionParameters
@@ -45,7 +46,14 @@ internal class DefaultDispatcherOverDCApi : DispatcherOverDCApi {
         return doAssemble(response)
     }
 
-    internal fun doAssemble(response: AuthorizationResponse): JsonObject = when (response) {
+    override fun assembleErrorResponse(
+        error: AuthorizationRequestError,
+    ): JsonObject = buildJsonObject {
+        val errorCode = AuthorizationRequestErrorCode.fromError(error)
+        put("error", JsonPrimitive(errorCode.code))
+    }
+
+    private fun doAssemble(response: AuthorizationResponse): JsonObject = when (response) {
         is AuthorizationResponse.DCApi ->
             response.data.asJsonObject()
 
@@ -54,7 +62,6 @@ internal class DefaultDispatcherOverDCApi : DispatcherOverDCApi {
         }
         else ->
             error("Unsupported authorization response ${response::class::simpleName} for dispatching over DC API")
-
     }
 
     private fun AuthorizationResponse.DCApiJwt.encryptData(): Jwt {

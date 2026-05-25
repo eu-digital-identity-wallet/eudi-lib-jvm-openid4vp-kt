@@ -60,9 +60,8 @@ private fun responseWith(
             data,
             di.responseEncryptionSpecification,
         )
-        ResponseMode.DCApi -> DCApi(data)
-        ResponseMode.DCApiJwt -> DCApiJwt(
-            data,
-            di.responseEncryptionSpecification,
-        )
+
+        ResponseMode.DCApi,
+        ResponseMode.DCApiJwt,
+        -> error("DC API response mode not supported for error dispatching via redirects")
     }

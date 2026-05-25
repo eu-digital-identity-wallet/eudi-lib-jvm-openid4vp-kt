@@ -259,7 +259,7 @@ private class Wallet(
     private val httpClient: HttpClient,
 ) {
     private val openId4Vp: OpenId4Vp.OverHttp by lazy {
-        OpenId4Vp.overHttp(walletConfig, httpClient)
+        OpenId4Vp.overRedirects(walletConfig, httpClient)
     }
 
     suspend fun handle(uri: URI): DispatchOutcome {
