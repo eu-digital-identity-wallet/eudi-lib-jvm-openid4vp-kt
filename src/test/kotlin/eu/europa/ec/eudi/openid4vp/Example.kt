@@ -258,8 +258,8 @@ private class Wallet(
     private val walletConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) {
-    private val openId4Vp: OpenId4Vp by lazy {
-        OpenId4Vp(walletConfig, httpClient)
+    private val openId4Vp: OpenId4Vp.OverHttp by lazy {
+        OpenId4Vp.overRedirects(walletConfig, httpClient)
     }
 
     suspend fun handle(uri: URI): DispatchOutcome {
@@ -271,7 +271,7 @@ private class Wallet(
         }
     }
 
-    suspend fun OpenId4Vp.handle(
+    suspend fun OpenId4Vp.OverHttp.handle(
         uri: String,
         holderConsensus: suspend (ResolvedRequestObject) -> Consensus,
     ): DispatchOutcome =
@@ -368,6 +368,7 @@ private class Wallet(
             is ResponseMode.FragmentJwt -> responseMode.redirectUri.toString()
             is ResponseMode.Query -> responseMode.redirectUri.toString()
             is ResponseMode.QueryJwt -> responseMode.redirectUri.toString()
+            ResponseMode.DCApi, ResponseMode.DCApiJwt -> error("No uri for response mode $this")
         }
 
         val openID4VPHandoverInfo = listOf(
@@ -456,7 +457,7 @@ private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix
                 ),
             ),
         ),
-        jarConfiguration = JarConfiguration(
+        signedRequestConfiguration = SignedRequestConfiguration(
             supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
             supportedRequestUriMethods = SupportedRequestUriMethods.Both(
                 SupportedRequestUriMethods.Post(

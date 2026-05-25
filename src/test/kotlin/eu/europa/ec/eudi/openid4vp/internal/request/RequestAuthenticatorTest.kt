@@ -26,8 +26,7 @@ import com.nimbusds.jose.util.Base64URL
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
-import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
-import eu.europa.ec.eudi.openid4vp.internal.DID
+import eu.europa.ec.eudi.openid4vp.internal.*
 import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.DisplayName
@@ -35,12 +34,10 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.assertThrows
 import java.net.URI
 import java.time.Clock
-import kotlin.test.Test
-import kotlin.test.assertEquals
-import kotlin.test.assertIs
-import kotlin.test.assertTrue
+import kotlin.test.*
 
-class ClientAuthenticatorTest {
+@DisplayName("In case of request is coming through HTTP")
+class ClientAuthenticatorOverHTTPTest {
 
     @DisplayName("when handling a request")
     @Nested
@@ -67,7 +64,7 @@ class ClientAuthenticatorTest {
         fun `if client_id is missing, authentication fails`() = runTest {
             val request = UnvalidatedRequestObject(clientId = null).unsigned()
             assertFailsWithError<RequestValidationError.MissingClientId> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
         }
     }
@@ -99,7 +96,7 @@ class ClientAuthenticatorTest {
                     clientId = "redirect_uri:$clientId",
                 ).unsigned()
 
-                val client = clientAuthenticator.authenticateClient(request)
+                val client = clientAuthenticator.authenticateClientOverHttp(request)
                 assertEquals(AuthenticatedClient.RedirectUri(clientId), client)
             }
 
@@ -111,7 +108,7 @@ class ClientAuthenticatorTest {
             ).signed(alg, key)
 
             val error = assertFailsWithError<RequestValidationError.InvalidClientIdPrefix> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertEquals("RedirectUri cannot be used in signed request", error.value)
         }
@@ -123,7 +120,7 @@ class ClientAuthenticatorTest {
                 clientId = "redirect_uri:$httpClientId",
             ).unsigned()
 
-            assertThrows<AuthorizationRequestException> { clientAuthenticator.authenticateClient(request) }
+            assertThrows<AuthorizationRequestException> { clientAuthenticator.authenticateClientOverHttp(request) }
         }
     }
 
@@ -166,7 +163,7 @@ class ClientAuthenticatorTest {
                     clientId = "testPreRegistered",
                 ).signed(alg, key)
 
-                val client = clientAuthenticator.authenticateClient(request)
+                val client = clientAuthenticator.authenticateClientOverHttp(request)
                 assertEquals(AuthenticatedClient.Preregistered(preRegisteredClient), client)
             }
 
@@ -179,7 +176,7 @@ class ClientAuthenticatorTest {
                 ).signed(alg, key)
 
                 val authenticateClient =
-                    assertIs<AuthenticatedClient.Preregistered>(clientAuthenticator.authenticateClient(request))
+                    assertIs<AuthenticatedClient.Preregistered>(clientAuthenticator.authenticateClientOverHttp(request))
                 assertEquals(preRegisteredClientFooBar, authenticateClient.preregisteredClient)
             }
     }
@@ -218,7 +215,7 @@ class ClientAuthenticatorTest {
             val request = requestObject.unsigned()
 
             val error = assertFailsWithError<RequestValidationError.InvalidClientIdPrefix> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.value.endsWith("cannot be used in unsigned request")
@@ -233,7 +230,7 @@ class ClientAuthenticatorTest {
             val request = requestObject.signed(alg, key)
 
             val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.cause.startsWith("Missing kid")
@@ -247,7 +244,7 @@ class ClientAuthenticatorTest {
             val request = requestObject.signed(alg, key) { keyID("foo") }
 
             val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.cause.endsWith("kid should be DID URL")
@@ -262,7 +259,7 @@ class ClientAuthenticatorTest {
             val request = requestObject.signed(alg, key) { keyID("did:foo:bar#1") }
 
             val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.cause.contains("kid should be DID URL sub-resource")
@@ -285,7 +282,7 @@ class ClientAuthenticatorTest {
 
             val request = requestObject.signed(alg, key) { keyID(keyUrl.toString()) }
             assertFailsWithError<RequestValidationError.DIDResolutionFailed> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
         }
 
@@ -293,7 +290,7 @@ class ClientAuthenticatorTest {
         fun `if resolution succeeds, authentication succeeds`() = runTest {
             val (alg, key) = algAndKey
             val request = requestObject.signed(alg, key) { keyID(keyUrl.toString()) }
-            val client = clientAuthenticator.authenticateClient(request)
+            val client = clientAuthenticator.authenticateClientOverHttp(request)
             assertEquals(AuthenticatedClient.DecentralizedIdentifier(originalClientId, key.toPublicKey()), client)
         }
     }
@@ -330,7 +327,7 @@ class ClientAuthenticatorTest {
             val request = requestObject.unsigned()
 
             val error = assertFailsWithError<RequestValidationError.InvalidClientIdPrefix> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.value.endsWith("cannot be used in unsigned request")
@@ -342,7 +339,7 @@ class ClientAuthenticatorTest {
             val (alg, key) = algAndKey
             val request = requestObject.signed(alg, key)
             val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue {
                 error.cause.contains("Missing jwt JOSE Header")
@@ -360,7 +357,7 @@ class ClientAuthenticatorTest {
             )
             val request = requestObject.signedWithAttestation(alg, key, verifierAttestation)
 
-            val client = clientAuthenticator.authenticateClient(request)
+            val client = clientAuthenticator.authenticateClientOverHttp(request)
             assertIs<AuthenticatedClient.VerifierAttestation>(client)
             assertEquals(clientId, client.clientId)
             assertEquals(AttestationIssuer.ID, client.claims.iss)
@@ -397,9 +394,140 @@ class ClientAuthenticatorTest {
 
             val request = requestObject.signedWithAttestation(alg, key, verifierAttestation)
             val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
-                clientAuthenticator.authenticateClient(request)
+                clientAuthenticator.authenticateClientOverHttp(request)
             }
             assertTrue { "Not trusted" in error.cause }
+        }
+    }
+}
+
+@DisplayName("In case of request is coming through DC API")
+class RequestAuthenticatorOverDCApiTest {
+
+    private val didAlgAndKey = randomKey()
+
+    private val x509SanDnsSupportedPrefix = SupportedClientIdPrefix.X509SanDns({ _ -> true })
+    private val didSupportedScheme = SupportedClientIdPrefix.DecentralizedIdentifier({ _ -> didAlgAndKey.second.toPublicKey() })
+
+    private val cfg = OpenId4VPConfig(
+        vpConfiguration = VPConfiguration(
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                ),
+            ),
+        ),
+        supportedClientIdPrefixes = listOf(x509SanDnsSupportedPrefix, didSupportedScheme),
+        signedRequestConfiguration = SignedRequestConfiguration(
+            supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
+            supportedRequestUriMethods = SupportedRequestUriMethods.Default,
+            multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
+        ),
+    )
+
+    @DisplayName("when handling a request")
+    @Nested
+    inner class AuthenticatorCommonTest {
+
+        private val clientAuthenticator = ClientAuthenticator(cfg)
+        private val requestAuthenticator = RequestAuthenticator(cfg, createHttpClient())
+
+        @Test
+        fun `if request is unsinged the resolved client must be Origin`() = runTest {
+            val request = UnvalidatedRequestObject().unsigned()
+
+            val (authenticateClient, _) = clientAuthenticator.authenticateClientOverDCApi("test_origin", request)
+            assertIs<AuthenticatedClient.Origin>(authenticateClient)
+            assertTrue("test_origin" == authenticateClient.clientId)
+        }
+    }
+
+    @DisplayName("when handling a multi-signed request")
+    @Nested
+    inner class ClientAuthenticatorMultiSignedRequestsTest {
+
+        private val clientAuthenticator = ClientAuthenticator(cfg)
+
+        @Test
+        fun `if expected scheme is found request client is properly authenticated`() = runTest {
+            val request = UnvalidatedRequestObject(
+                expectedOrigins = listOf("test_origin", "test_origin_alt"),
+            ).multiSigned(
+                listOf(didSigner(), verifierAttestationSigner()),
+            )
+            val (authenticateClient, _) = clientAuthenticator.authenticateClientOverDCApi("test_origin", request)
+            assertIs<AuthenticatedClient.DecentralizedIdentifier>(authenticateClient)
+        }
+
+        @Test
+        fun `if request expected scheme is not found in request fail`() = runTest {
+            val request = UnvalidatedRequestObject(
+                expectedOrigins = listOf("test_origin", "test_origin_alt"),
+            ).multiSigned(
+                listOf(verifierAttestationSigner()),
+            )
+            assertFailsWithError<RequestValidationError.NoMatchingClientPrefixInMultiSignedRequest> {
+                clientAuthenticator.authenticateClientOverDCApi("test_origin", request)
+            }
+        }
+
+        private fun didSigner(): SchemeSigner {
+            val (alg2, key2) = didAlgAndKey
+            val originalClientId = DID.parse("did:example:123").getOrThrow()
+            val clientId = "decentralized_identifier:$originalClientId"
+            return SchemeSigner(alg2, key2) {
+                customParam("client_id", clientId)
+                keyID("did:example:123#key-1")
+            }
+        }
+
+        private fun verifierAttestationSigner(): SchemeSigner {
+            val (alg, key) = randomKey()
+            val verifierAttestation = AttestationIssuer.attestation(
+                clock = cfg.clock,
+                clientId = "verifier_attestation:http://example.com",
+                clientPubKey = key.toPublicJWK(),
+            )
+            return SchemeSigner(alg, key) {
+                customParam("client_id", "verifier_attestation:http://www.example.com")
+                customParam("jwt", verifierAttestation.serialize())
+            }
+        }
+
+        @Test
+        fun `can create a multi-signed request`() = runTest {
+            val originalClientId = DID.parse("did:example:123").getOrThrow()
+
+            // Create two signers with different keys
+            val (alg1, key1) = randomKey()
+            val (alg2, key2) = randomKey()
+
+            val signer1 = SchemeSigner(alg1, key1) { keyID(originalClientId.toString()) }
+            val signer2 = SchemeSigner(alg2, key2) { keyID(originalClientId.toString()) }
+
+            // Create a request object with client ID and expected origins
+            val clientId = "decentralized_identifier:$originalClientId"
+            val request = UnvalidatedRequestObject(
+                clientId = clientId,
+                expectedOrigins = listOf("test_origin", "test_origin_alt"),
+            ).multiSigned(listOf(signer1, signer2))
+
+            // Verify that the request is a ReceivedRequest.Signed with a JwsJson.General
+            assertIs<ReceivedRequest.Signed>(request)
+            assertIs<JwsJson.General>(request.jwsJson)
+
+            // Verify that the JwsJson.General has two signatures
+            val jwsJson = request.jwsJson
+            assertEquals(2, jwsJson.signatures.size)
+
+            // Verify that the signatures have the correct protected headers
+            val signature1 = jwsJson.signatures[0]
+            val signature2 = jwsJson.signatures[1]
+
+            assertNotNull(signature1.protected)
+            assertNotNull(signature2.protected)
         }
     }
 }
@@ -443,6 +571,56 @@ private fun UnvalidatedRequestObject.signed(
     }
     return ReceivedRequest.Signed(jwt)
 }
+
+private fun UnvalidatedRequestObject.multiSigned(
+    signers: List<SchemeSigner>,
+): ReceivedRequest.Signed {
+    require(signers.isNotEmpty()) { "At least one signer is required" }
+
+    // Convert the request object to JWT claims
+    val claimsSet = toJWTClaimSet()
+
+    // Create the payload as Base64UrlNoPadding
+    val payloadJson = claimsSet.toString()
+    val payloadBase64 = base64UrlNoPadding.encode(payloadJson.encodeToByteArray())
+    val payload = Base64UrlNoPadding.invoke(payloadBase64).getOrThrow()
+
+    // Create signatures for each signer
+    val signatures = signers.map { signer ->
+        // Create a SignedJWT for this signer
+        val header = with(JWSHeader.Builder(signer.alg)) {
+            type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
+            signer.headerCustomization(this)
+            build()
+        }
+
+        // Sign the JWT
+        val jwt = SignedJWT(header, claimsSet).apply {
+            val jwsSigner = DefaultJWSSignerFactory().createJWSSigner(signer.key, signer.alg)
+            sign(jwsSigner)
+        }
+
+        // Extract the parts from the signed JWT
+        val parts = jwt.serialize().split(".")
+        val protectedHeader = Base64UrlNoPadding(parts[0]).getOrThrow()
+        val signature = Base64UrlNoPadding(parts[2]).getOrThrow()
+
+        // Create a Signature object
+        Signature(protected = protectedHeader, signature = signature)
+    }
+
+    // Create a JwsJson.General object with the payload and signatures
+    val jwsJson = JwsJson.General(payload = payload, signatures = signatures)
+
+    // Return a ReceivedRequest.Signed with the JwsJson.General object
+    return ReceivedRequest.Signed(jwsJson)
+}
+
+private class SchemeSigner(
+    val alg: JWSAlgorithm,
+    val key: JWK,
+    val headerCustomization: (JWSHeader.Builder).() -> Unit,
+)
 
 private fun UnvalidatedRequestObject.toJWTClaimSet(): JWTClaimsSet {
     val json = Json.encodeToString(this)

@@ -108,6 +108,12 @@ enum class ClientIdPrefix {
      */
     X509Hash,
 
+    /**
+     * This prefix is intended to be used only when an authorization is performed over the DC API channel.
+     * It is not a prefix accepted in requests and is used to set the audience of the Credential Presentation response.
+     */
+    ORIGIN,
+
     ;
 
     /**
@@ -115,7 +121,7 @@ enum class ClientIdPrefix {
      */
     fun permitsSignedRequestObjects(): Boolean = when (this) {
         RedirectUri -> false
-        PreRegistered, VerifierAttestation, OpenIdFederation, DecentralizedIdentifier, X509SanDns, X509Hash -> true
+        PreRegistered, VerifierAttestation, OpenIdFederation, DecentralizedIdentifier, X509SanDns, X509Hash, ORIGIN -> true
     }
 
     companion object {
@@ -126,6 +132,7 @@ enum class ClientIdPrefix {
             OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION -> VerifierAttestation
             OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS -> X509SanDns
             OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH -> X509Hash
+            OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN -> ORIGIN
             else -> null
         }
     }
@@ -154,6 +161,7 @@ data class VerifierId(
             ClientIdPrefix.VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
             ClientIdPrefix.X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
             ClientIdPrefix.X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
+            ClientIdPrefix.ORIGIN -> OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN
         }
 
         buildString {
@@ -185,6 +193,7 @@ data class VerifierId(
                     ClientIdPrefix.VerifierAttestation -> VerifierId(prefix, originalClientId)
                     ClientIdPrefix.X509SanDns -> VerifierId(prefix, originalClientId)
                     ClientIdPrefix.X509Hash -> VerifierId(prefix, originalClientId)
+                    ClientIdPrefix.ORIGIN -> VerifierId(prefix, originalClientId)
                     null -> preRegistered()
                 }
             }
@@ -212,6 +221,14 @@ sealed interface ResponseMode : java.io.Serializable {
     data class FragmentJwt(val redirectUri: URI) : ResponseMode
     data class DirectPost(val responseURI: URL) : ResponseMode
     data class DirectPostJwt(val responseURI: URL) : ResponseMode
+
+    data object DCApi : ResponseMode {
+        private fun readResolve(): Any = DCApi
+    }
+
+    data object DCApiJwt : ResponseMode {
+        private fun readResolve(): Any = DCApiJwt
+    }
 }
 
 internal fun ResponseMode.requiresEncryption() =
@@ -222,6 +239,8 @@ internal fun ResponseMode.requiresEncryption() =
         is ResponseMode.FragmentJwt -> true
         is ResponseMode.Query -> false
         is ResponseMode.QueryJwt -> true
+        ResponseMode.DCApi -> false
+        ResponseMode.DCApiJwt -> true
     }
 
 typealias Jwt = String

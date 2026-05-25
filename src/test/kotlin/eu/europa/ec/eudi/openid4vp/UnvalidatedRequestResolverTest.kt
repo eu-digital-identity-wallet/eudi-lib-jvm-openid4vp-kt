@@ -29,11 +29,14 @@ import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.oauth2.sdk.id.State
+import eu.europa.ec.eudi.openid4vp.RequestValidationError.MissingExpectedOrigins
+import eu.europa.ec.eudi.openid4vp.RequestValidationError.UnexpectedOrigin
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.dcql.QueryId
 import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
-import eu.europa.ec.eudi.openid4vp.internal.request.DefaultAuthorizationRequestResolver
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
@@ -91,8 +94,7 @@ class UnvalidatedRequestResolverTest {
     fun teardown() {
         httpClient.close()
     }
-
-    private fun resolver() = DefaultAuthorizationRequestResolver(walletConfig, httpClient)
+    private fun resolver() = DefaultRequestResolverOverHttp(walletConfig, httpClient)
 
     private val dcqlQuery = readFileAsText("dcql/basic_example.json")
         .replace("\r\n", "")
@@ -152,7 +154,7 @@ class UnvalidatedRequestResolverTest {
             SupportedClientIdPrefix.X509SanDns(::validateChain),
             SupportedClientIdPrefix.X509Hash(::validateChain),
         ),
-        jarConfiguration = JarConfiguration(
+        signedRequestConfiguration = SignedRequestConfiguration(
             supportedAlgorithms = listOf(JWSAlgorithm.RS256),
         ),
         vpConfiguration = VPConfiguration(
@@ -211,7 +213,7 @@ class UnvalidatedRequestResolverTest {
                     "&client_metadata=$clientMetadataJwksInline"
 
             val resolution = resolver().resolveRequestUri(authRequest)
-            resolution.validateSuccess()
+            resolution.assertIsSuccess()
         }
 
         test(genState())
@@ -233,7 +235,7 @@ class UnvalidatedRequestResolverTest {
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
-            resolution.validateSuccess()
+            resolution.assertIsSuccess()
         }
 
         test(genState())
@@ -271,13 +273,13 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess()
+            it.assertIsSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
             .forEach { type ->
                 test(type) {
-                    it.validateInvalid<RequestValidationError.InvalidJarJwt>()
+                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
                 }
             }
     }
@@ -313,13 +315,13 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess()
+            it.assertIsSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
             .forEach { type ->
                 test(type) {
-                    it.validateInvalid<RequestValidationError.InvalidJarJwt>()
+                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
                 }
             }
     }
@@ -357,13 +359,13 @@ class UnvalidatedRequestResolverTest {
         }
 
         test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.validateSuccess()
+            it.assertIsSuccess()
         }
 
         listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
             .forEach { type ->
                 test(type) {
-                    it.validateInvalid<RequestValidationError.InvalidJarJwt>()
+                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
                 }
             }
     }
@@ -418,7 +420,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        resolution.validateInvalid<ResolutionError.ClientVpFormatsNotSupportedFromWallet>()
+        resolution.assertIsInvalid<ResolutionError.ClientVpFormatsNotSupportedFromWallet>()
     }
 
     @Test
@@ -451,7 +453,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        with(resolution.validateSuccess()) {
+        with(resolution.assertIsSuccess()) {
             with(assertNotNull(vpFormatsSupported)) {
                 assertNotNull(sdJwtVc)
                 assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.sdJwtAlgorithms)
@@ -472,7 +474,7 @@ class UnvalidatedRequestResolverTest {
                 "&dcql_query=$dcqlQuery"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess()
+        val request = resolution.assertIsSuccess()
 
         assertNull(request.vpFormatsSupported)
     }
@@ -503,7 +505,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess()
+        val request = resolution.assertIsSuccess()
         val formats = request.vpFormatsSupported
         val sdJwtFormat = assertNotNull(formats?.sdJwtVc)
 
@@ -552,7 +554,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.validateSuccess()
+        val request = resolution.assertIsSuccess()
         val formats = request.vpFormatsSupported
         assertNull(formats?.sdJwtVc)
         val msoMdocFormat = assertNotNull(formats?.msoMdoc)
@@ -652,7 +654,7 @@ class UnvalidatedRequestResolverTest {
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
-            resolution.validateInvalid<RequestValidationError.UnsupportedResponseType>()
+            resolution.assertIsInvalid<RequestValidationError.UnsupportedResponseType>()
         }
 
         test(genState())
@@ -672,7 +674,7 @@ class UnvalidatedRequestResolverTest {
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
-            resolution.validateInvalid<RequestValidationError.MissingNonce>()
+            resolution.assertIsInvalid<RequestValidationError.MissingNonce>()
         }
 
         test(genState())
@@ -692,7 +694,7 @@ class UnvalidatedRequestResolverTest {
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
-            resolution.validateInvalid<RequestValidationError.MissingClientId>()
+            resolution.assertIsInvalid<RequestValidationError.MissingClientId>()
         }
 
         test(genState())
@@ -717,17 +719,302 @@ class UnvalidatedRequestResolverTest {
     private fun load(f: String): InputStream =
         UnvalidatedRequestResolverTest::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
 
-    private fun Resolution.validateSuccess(): ResolvedRequestObject =
+    private fun Resolution.assertIsSuccess(): ResolvedRequestObject =
         when (this) {
             is Resolution.Success -> requestObject
             is Resolution.Invalid -> fail("Invalid resolution found while expected success\n$error")
         }
 
-    private inline fun <reified T : AuthorizationRequestError> Resolution.validateInvalid(): T =
+    private inline fun <reified T : AuthorizationRequestError> Resolution.assertIsInvalid(): T =
         when (this) {
             is Resolution.Invalid -> assertIs(error, "${T::class} error expected")
             else -> fail("Success resolution found while expected Invalid")
         }
+
+    @DisplayName("when authorization request comes through DC API channel")
+    @Nested
+    inner class RequestResolutionOverDCApiTest {
+
+        private val dcqlQuery = readFileAsText("dcql/basic_example.json")
+            .replace("\r\n", "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace("  ", "")
+
+        private val resolver = DefaultRequestResolverOverDCApi(walletConfig, httpClient)
+
+        private val clientMetadata =
+            """ {
+                 "jwks": $jwkSetJO,
+                 "vp_formats_supported": {
+                     "dc+sd-jwt": {
+                         "sd-jwt_alg_values": ["RS256", "ES512", "ES256", "ES384"],
+                         "kb-jwt_alg_values": ["RS256", "ES512", "ES384"]
+                     }
+                 }    
+               }
+            """.trimIndent()
+
+        private fun jwtClaimsSetDCApiRequest(
+            clientId: String? = null,
+            clientMetadata: UnvalidatedClientMetaData? = null,
+            responseMode: String? = "dc_api",
+            expectedOrigins: List<String>? = null,
+        ): JWTClaimsSet =
+            with(JWTClaimsSet.Builder()) {
+                audience("https://self-issued.me/v2")
+                issueTime(Date())
+                clientId?.let { claim("client_id", clientId) }
+                claim("response_type", "vp_token")
+                claim("nonce", "nonce")
+                claim("response_mode", responseMode)
+                claim("dcql_query", Jackson.toJsonObject(Json.decodeFromString<JsonObject>(dcqlQuery)))
+                claim("state", "638JwH0b2jrhGlAZQVa50KysVazkI-YpiFcLj2DLMalJpZK6XC22vAsPqXkpwAwXzfYpK-WLc3GhHYK8lbT6rw")
+                clientMetadata?.let { claim("client_metadata", Jackson.toJsonObject(clientMetadata)) }
+                expectedOrigins?.let { claim("expected_origins", expectedOrigins) }
+                build()
+            }
+
+        @Test
+        fun `nonce is mandatory to exist`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "dc_api")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            assertIs<Resolution.Invalid>(resolution)
+            assertIs<RequestValidationError.MissingNonce>(resolution.error)
+        }
+
+        @Test
+        fun `response_mode must be dc_api or dc_api jwt`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "fragment")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            val invalid = resolution.assertIsInvalid<RequestValidationError.UnsupportedResponseMode>()
+            assertEquals("fragment", invalid.value)
+        }
+
+        @Test
+        fun `response_type is ignored if provided in request`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_type", "id_token")
+                put("response_mode", "dc_api")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            val request = resolution.assertIsSuccess()
+            assertIs<Client.Origin>(request.client)
+            assertEquals("test_origin", request.client.clientId)
+        }
+
+        @Test
+        fun `and no presentation query passed, resolution fails`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "dc_api")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            resolution.assertIsInvalid<RequestValidationError.MissingQuerySource>()
+        }
+
+        @Test
+        fun `if response_mode is dc_api jwt, client metadata must be included in request`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "dc_api.jwt")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            val invalid = resolution.assertIsInvalid<RequestValidationError.InvalidClientMetaData>()
+            assertEquals("Missing client metadata", invalid.cause)
+        }
+
+        @Test
+        fun `if exchange protocol is not supported, resolution fails`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "dc_api.jwt")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+            }
+            var resolution = resolver.resolveRequestObject("org-iso-mdoc", "test_origin", requestData)
+            resolution.assertIsInvalid<ResolutionError.UnsupportedDcApiExchangeProtocol>()
+
+            resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED, "test_origin", requestData,
+            )
+            resolution.assertIsInvalid<ResolutionError.DcApiExchangeProtocolNotMatchesReceivedRequest>()
+        }
+
+        @Test
+        fun `client_id is ignored if provided in request`() = runTest {
+            val requestData = buildJsonObject {
+                put("client_id", "client_id")
+                put("response_mode", "dc_api")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            val request = resolution.assertIsSuccess()
+            assertIs<Client.Origin>(request.client)
+            assertEquals("test_origin", request.client.clientId)
+        }
+
+        @Test
+        fun `verifier attestations are parsed correctly`() = runTest {
+            val requestData = buildJsonObject {
+                put("response_mode", "dc_api")
+                put("nonce", "n-0S6_WzA2Mj")
+                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
+                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
+                putJsonArray("verifier_info", {
+                    add(
+                        buildJsonObject {
+                            put("format", "jwt")
+                            put("data", "attestation_data")
+                        },
+                    )
+                    add(
+                        buildJsonObject {
+                            put("format", "jwt")
+                            put("data", "attestation_data_1")
+                        },
+                    )
+                })
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
+                "test_origin",
+                requestData,
+            )
+            val request = resolution.assertIsSuccess()
+
+            assertNotNull(request.verifierInfo)
+
+            val jwtAttestations = request.verifierInfo.attestations.filter {
+                it.format == VerifierInfo.Attestation.Format.Jwt
+            }.size
+            assertEquals(2, jwtAttestations)
+        }
+
+        @Test
+        fun `when request is of JWS compact serialization form, it is parsed properly`() = runTest {
+            val keyStore = KeyStore.getInstance("JKS")
+            keyStore.load(
+                load("certificates/certificates.jks"),
+                "12345".toCharArray(),
+            )
+            val clientId = "x509_san_dns:verifier.example.gr"
+            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+                clientId = clientId,
+                responseMode = "dc_api",
+                expectedOrigins = listOf("test_origin"),
+            )
+            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
+            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+
+            val requestData = buildJsonObject {
+                put("request", signedJwt)
+            }
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                "test_origin",
+                requestData,
+            )
+            val request = resolution.assertIsSuccess()
+            assertIs<Client.X509SanDns>(request.client)
+        }
+
+        @Test
+        fun `if request is signed and expected_origins is missing, fail resolution with MissingExpectedOrigins`() = runTest {
+            val keyStore = KeyStore.getInstance("JKS")
+            keyStore.load(
+                load("certificates/certificates.jks"),
+                "12345".toCharArray(),
+            )
+            val clientId = "x509_san_dns:verifier.example.gr"
+            // Request with no expected_origins
+            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+                clientId = clientId,
+                responseMode = "dc_api",
+            )
+            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
+            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+
+            val requestData = buildJsonObject {
+                put("request", signedJwt)
+            }
+
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                "test_origin",
+                requestData,
+            )
+            resolution.assertIsInvalid<MissingExpectedOrigins>()
+        }
+
+        @Test
+        fun `if request is signed, caller info's origin must be one of the expected_origins`() = runTest {
+            val keyStore = KeyStore.getInstance("JKS")
+            keyStore.load(
+                load("certificates/certificates.jks"),
+                "12345".toCharArray(),
+            )
+            val clientId = "x509_san_dns:verifier.example.gr"
+            // Request with no expected_origins
+            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+                clientId = clientId,
+                responseMode = "dc_api",
+                expectedOrigins = listOf("origin_1", "origin_2"),
+            )
+            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
+            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+
+            val requestData = buildJsonObject {
+                put("request", signedJwt)
+            }
+
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                "test_origin",
+                requestData,
+            )
+            resolution.assertIsInvalid<UnexpectedOrigin>()
+        }
+    }
 
     @DisplayName("when using transaction_data")
     @Nested
@@ -781,7 +1068,7 @@ class UnvalidatedRequestResolverTest {
         fun `if transaction_data contains non base64url encoded values, resolution fails`() = runTest {
             val transactionData = JsonArray(listOf(JsonPrimitive("invalid")))
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals("The pad bits must be zeros", cause.message)
             }
@@ -791,7 +1078,7 @@ class UnvalidatedRequestResolverTest {
         fun `if transaction_data contains non JsonObject values, resolution fails`() = runTest {
             val transactionData = JsonArray(listOf(JsonPrimitive(base64UrlNoPadding.encode("foo".encodeToByteArray()))))
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<SerializationException>(error.cause)
                 assertEquals(
                     "Unexpected JSON token at offset 0: Expected start of the object '{', but had 'f' instead at path: $\nJSON input: foo",
@@ -804,7 +1091,7 @@ class UnvalidatedRequestResolverTest {
         fun `if transaction_data contains no type, resolution fails`() = runTest {
             val transactionData = JsonObject(emptyMap())
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Missing required property 'type'",
@@ -819,7 +1106,7 @@ class UnvalidatedRequestResolverTest {
                 put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, 10)
             }
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Property 'type' is not a string'",
@@ -835,7 +1122,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(QueryId("my_credential")),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Unsupported Transaction Data 'type': 'unsupported'",
@@ -850,7 +1137,7 @@ class UnvalidatedRequestResolverTest {
                 put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, "basic-transaction-data")
             }
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Missing required property 'credential_ids'",
@@ -868,7 +1155,7 @@ class UnvalidatedRequestResolverTest {
                 }
             }
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Property 'credential_ids' is not an array or contains non string values",
@@ -885,7 +1172,7 @@ class UnvalidatedRequestResolverTest {
                     listOf(QueryId("invalid-id")),
                 )
                 testAndThen(transactionData.json, queryWithSingleCredential) {
-                    val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                    val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                     val cause = assertIs<IllegalArgumentException>(error.cause)
                     assertEquals(
                         "Invalid Transaction Data 'credential_ids': '[invalid-id]'",
@@ -901,7 +1188,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(QueryId("invalid-id")),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Invalid Transaction Data 'credential_ids': '[invalid-id]'",
@@ -917,7 +1204,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(QueryId("my_credential_1"), QueryId("my_credential_2")),
             )
             testAndThen(transactionData.json, queryWithMultipleCredentials) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Transaction Data must refer to Credentials that use the same Format",
@@ -936,7 +1223,7 @@ class UnvalidatedRequestResolverTest {
                 put(OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS, "invalid")
             }
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Property 'transaction_data_hashes_alg' is not an array or contains non string values",
@@ -957,7 +1244,7 @@ class UnvalidatedRequestResolverTest {
                 }
             }
             testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Property 'transaction_data_hashes_alg' is not an array or contains non string values",
@@ -974,7 +1261,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm("sha-512")),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Unsupported Transaction Data 'transaction_data_hashes_alg': '[sha-512]'",
@@ -991,7 +1278,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm.SHA_256),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess()
+                val request = it.assertIsSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)
@@ -1014,7 +1301,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm.SHA_256),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess()
+                val request = it.assertIsSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)
@@ -1037,7 +1324,7 @@ class UnvalidatedRequestResolverTest {
                     listOf(QueryId("my_credential")),
                 )
                 testAndThen(transactionData.json, queryWithSingleCredential) {
-                    val request = it.validateSuccess()
+                    val request = it.assertIsSuccess()
                     val resolvedTransactionData = run {
                         val resolvedTransactionData = assertNotNull(request.transactionData)
                         assertEquals(1, resolvedTransactionData.size)
@@ -1060,7 +1347,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(HashAlgorithm("sha-384")),
             )
             testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.validateSuccess()
+                val request = it.assertIsSuccess()
                 val resolvedTransactionData = run {
                     val resolvedTransactionData = assertNotNull(request.transactionData)
                     assertEquals(1, resolvedTransactionData.size)
@@ -1082,7 +1369,7 @@ class UnvalidatedRequestResolverTest {
                 listOf(QueryId("my_credential_2")),
             )
             testAndThen(transactionData.json, queryWithMultipleCredentials) {
-                val error = it.validateInvalid<ResolutionError.InvalidTransactionData>()
+                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
                 val cause = assertIs<IllegalArgumentException>(error.cause)
                 assertEquals(
                     "Unsupported Transaction Data Format 'mso_mdoc'",
