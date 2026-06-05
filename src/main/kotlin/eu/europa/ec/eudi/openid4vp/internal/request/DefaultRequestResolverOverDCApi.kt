@@ -57,9 +57,9 @@ internal class DefaultRequestResolverOverDCApi(
     private suspend fun HttpClient.resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution {
         try {
             val receivedRequest = ReceivedRequest.make(requestData).getOrThrow()
-            val dcApiProtocol = DCApiExchangeProtocol.from(protocol)
+            val exchangeProtocol = DCApiExchangeProtocol.from(protocol)
 
-            dcApiProtocol assertMatches receivedRequest
+            exchangeProtocol assertMatches receivedRequest
 
             val authenticatedRequest = authenticateRequest(origin, receivedRequest)
             val resolved = validateRequestObject(origin, authenticatedRequest, receivedRequest is Signed)
@@ -84,9 +84,8 @@ internal class DefaultRequestResolverOverDCApi(
         return requestValidator.validateDCApiRequestObject(origin, authenticatedRequest, isSigned)
     }
 
-    fun ReceivedRequest.Companion.make(requestData: JsonObject): Result<ReceivedRequest> = runCatching {
+    private fun ReceivedRequest.Companion.make(requestData: JsonObject): Result<ReceivedRequest> = runCatching {
         val requestValue = requestData["request"]
-
         when {
             requestValue != null && requestValue is JsonObject -> {
                 val jwsJson = jsonSupport.decodeFromJsonElement<JwsJson>(requestValue)
@@ -103,7 +102,7 @@ internal class DefaultRequestResolverOverDCApi(
     }
 }
 
-internal infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedRequest) = when (this) {
+private infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedRequest) = when (this) {
     DCApiExchangeProtocol.UNSIGNED ->
         ensure(receivedRequest is Unsigned) {
             asMissMatchException(

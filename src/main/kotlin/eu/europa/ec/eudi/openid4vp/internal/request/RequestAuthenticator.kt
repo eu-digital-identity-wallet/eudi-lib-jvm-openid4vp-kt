@@ -185,11 +185,6 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
         }.firstOrNull()
             ?: throw NoMatchingClientPrefixInMultiSignedRequest.asException()
 
-    private fun JwsJson.Flattened.assertVerifierInProtectedHeader() {
-        // If verifier_info exists in unprotected header cannot be trusted
-        // if verifier_info exists in unprotected header but not in protected fail
-    }
-
     private fun JwsJson.Flattened.clientIdFromProtectedHeader(): String? {
         val protectedHeader: JsonObject? = protected?.decodeAs()
         return protectedHeader?.get("client_id")?.let {
