@@ -100,7 +100,7 @@ internal sealed interface JwsJson {
         /**
          * Parses an input string representing a JWS in compact form into a [JwsJson.Flattened] object.
          */
-        fun from(compact: String): Result<JwsJson> = runCatchingCancellable {
+        fun fromCompact(compact: String): Result<Flattened> = runCatchingCancellable {
             require(compact.isNotBlank()) { "Input must not be empty" }
             compact.split(".").let { parts ->
                 require(parts.size == 3) { "Input must be a JWS in compact form" }
@@ -109,7 +109,7 @@ internal sealed interface JwsJson {
                     put(RFC7515Spec.JWS_JSON_SYNTAX_PAYLOAD, parts[1])
                     put(RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURE, parts[2])
                 }
-                Json.decodeFromJsonElement<JwsJson>(jwsJsonObject)
+                Json.decodeFromJsonElement<Flattened>(jwsJsonObject)
             }
         }
 

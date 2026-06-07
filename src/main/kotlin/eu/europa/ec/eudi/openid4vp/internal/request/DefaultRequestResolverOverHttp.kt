@@ -237,6 +237,7 @@ private fun dispatchErrorDetailsOrNull(
     when (fetchedRequest) {
         is ReceivedRequest.Signed -> dispatchErrorDetailsOrNull(fetchedRequest.jwsJson, openId4VPConfig)
         is ReceivedRequest.Unsigned -> dispatchErrorDetailsOrNull(fetchedRequest.requestObject, openId4VPConfig)
+        is ReceivedRequest.MultiSigned -> error("Multisigned requests not expected over redirects")
     }
 
 /**

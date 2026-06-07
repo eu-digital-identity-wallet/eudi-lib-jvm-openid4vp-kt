@@ -19,8 +19,7 @@ import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.JwsJson
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
-import eu.europa.ec.eudi.openid4vp.internal.request.ReceivedRequest.Signed
-import eu.europa.ec.eudi.openid4vp.internal.request.ReceivedRequest.Unsigned
+import eu.europa.ec.eudi.openid4vp.internal.request.ReceivedRequest.*
 import io.ktor.client.*
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
@@ -88,12 +87,12 @@ internal class DefaultRequestResolverOverDCApi(
         val requestValue = requestData["request"]
         when {
             requestValue != null && requestValue is JsonObject -> {
-                val jwsJson = jsonSupport.decodeFromJsonElement<JwsJson>(requestValue)
-                Signed(jwsJson)
+                val jwsJson = jsonSupport.decodeFromJsonElement<JwsJson.General>(requestValue)
+                MultiSigned(jwsJson)
             }
 
             requestValue != null && requestValue is JsonPrimitive -> {
-                val jwsJson = JwsJson.from(requestValue.jsonPrimitive.content).getOrThrow()
+                val jwsJson = JwsJson.fromCompact(requestValue.jsonPrimitive.content).getOrThrow()
                 Signed(jwsJson)
             }
 
@@ -111,7 +110,7 @@ private infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedR
         }
 
     DCApiExchangeProtocol.SIGNED ->
-        ensure(receivedRequest is Signed && receivedRequest.jwsJson is JwsJson.Flattened) {
+        ensure(receivedRequest is Signed) {
             asMissMatchException(
                 "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED} but request's format is not JWS " +
                     "compact serialization.",
@@ -119,7 +118,7 @@ private infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedR
         }
 
     DCApiExchangeProtocol.MULTISIGNED ->
-        ensure(receivedRequest is Signed && receivedRequest.jwsJson is JwsJson.General) {
+        ensure(receivedRequest is MultiSigned) {
             asMissMatchException(
                 "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_MULTISIGNED} but request's format is not " +
                     "JWS general serialization.",

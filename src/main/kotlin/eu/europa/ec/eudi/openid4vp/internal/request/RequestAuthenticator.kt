@@ -83,14 +83,21 @@ internal class RequestAuthenticator(openId4VPConfig: OpenId4VPConfig, httpClient
             is ReceivedRequest.Unsigned -> {
                 AuthenticatedRequest(client, request.requestObject)
             }
-
-            is ReceivedRequest.Signed -> {
+            else -> {
                 requireNotNull(signedJwt) {
                     "Expected a signed request but was not."
                 }
-                val requestObject = signedJwt.requestObject()
-                    .extendWithHeaderAttributes(signedJwt.header)
-                with(signatureVerifier) { verifySignature(client, signedJwt) }
+                val requestObject = when (request) {
+                    is ReceivedRequest.Signed ->
+                        signedJwt.requestObject()
+                    is ReceivedRequest.MultiSigned ->
+                        signedJwt.requestObject()
+                            .extendWithHeaderAttributes(signedJwt.header)
+                    else -> error("Cannot happen")
+                }
+                with(signatureVerifier) {
+                    verifySignature(client, signedJwt)
+                }
                 AuthenticatedRequest(client, requestObject)
             }
         }
@@ -103,9 +110,12 @@ internal class RequestAuthenticator(openId4VPConfig: OpenId4VPConfig, httpClient
                 AuthenticatedRequest(client, request.requestObject)
             }
             is ReceivedRequest.Signed -> {
-                val signedJwt = request.ensureSingleSignedRequest()
+                val signedJwt = request.jwsJson.toSignedJwt()
                 with(signatureVerifier) { verifySignature(client, signedJwt) }
                 AuthenticatedRequest(client, signedJwt.requestObject())
+            }
+            is ReceivedRequest.MultiSigned -> {
+                error("Multisigned requests are not expected over redirects.")
             }
         }
     }
@@ -124,20 +134,15 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
             is ReceivedRequest.Unsigned -> Origin(origin) to null
 
             is ReceivedRequest.Signed -> {
-                val jwsJson = request.jwsJson
-                when (jwsJson) {
-                    is JwsJson.Flattened -> {
-                        val signedJwt = jwsJson.toSignedJwt()
-                        val (originalClientId, clientIdPrefix) = originalClientIdAndPrefix(signedJwt.requestObject())
-                        authenticateClientPrefix(originalClientId, clientIdPrefix, signedJwt) to signedJwt
-                    }
+                val signedJwt = request.jwsJson.toSignedJwt()
+                val (originalClientId, clientIdPrefix) = originalClientIdAndPrefix(signedJwt.requestObject())
+                authenticateClientPrefix(originalClientId, clientIdPrefix, signedJwt) to signedJwt
+            }
 
-                    is JwsJson.General -> {
-                        val policy = openId4VPConfig.signedRequestConfiguration.multiSignedRequestsPolicy
-                        val (originalClientId, clientIdPrefix, signedJwt) = jwsJson apply policy
-                        authenticateClientPrefix(originalClientId, clientIdPrefix, signedJwt) to signedJwt
-                    }
-                }
+            is ReceivedRequest.MultiSigned -> {
+                val policy = openId4VPConfig.signedRequestConfiguration.multiSignedRequestsPolicy
+                val (originalClientId, clientIdPrefix, signedJwt) = request.jwsJson apply policy
+                authenticateClientPrefix(originalClientId, clientIdPrefix, signedJwt) to signedJwt
             }
         }
 
@@ -159,9 +164,11 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
         val (signedRequest, requestObject) = when (request) {
             is ReceivedRequest.Unsigned -> null to request.requestObject
             is ReceivedRequest.Signed -> {
-                val signedRequest = request.ensureSingleSignedRequest()
+                val signedRequest = request.jwsJson.toSignedJwt()
                 signedRequest to signedRequest.requestObject()
             }
+            is ReceivedRequest.MultiSigned ->
+                error("Multisigned requests are not expected over redirects.")
         }
         val (originalClientId, clientIdPrefix) = originalClientIdAndPrefix(requestObject)
         return authenticateClientPrefix(originalClientId, clientIdPrefix, signedRequest)
@@ -293,11 +300,6 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
         return pubCertChain
     }
 }
-
-private fun ReceivedRequest.Signed.ensureSingleSignedRequest(): SignedJWT =
-    ensure(jwsJson is JwsJson.Flattened) {
-        invalidJarJwt("Multi-signed authorization requests is not expected.")
-    }.let { jwsJson.toSignedJwt() }
 
 private suspend fun lookupKeyByDID(
     signedRequest: SignedJWT,

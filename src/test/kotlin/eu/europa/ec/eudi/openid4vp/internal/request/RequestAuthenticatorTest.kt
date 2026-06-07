@@ -522,7 +522,7 @@ class RequestAuthenticatorOverDCApiTest {
             ).multiSigned(listOf(signer1, signer2))
 
             // Verify that the request is a ReceivedRequest.Signed with a JwsJson.General
-            assertIs<ReceivedRequest.Signed>(request)
+            assertIs<ReceivedRequest.MultiSigned>(request)
             assertIs<JwsJson.General>(request.jwsJson)
 
             // Verify that the JwsJson.General has two signatures
@@ -581,7 +581,7 @@ private fun UnvalidatedRequestObject.signed(
 
 private fun UnvalidatedRequestObject.multiSigned(
     signers: List<SchemeSigner>,
-): ReceivedRequest.Signed {
+): ReceivedRequest.MultiSigned {
     require(signers.isNotEmpty()) { "At least one signer is required" }
 
     // Convert the request object to JWT claims
@@ -620,7 +620,7 @@ private fun UnvalidatedRequestObject.multiSigned(
     val jwsJson = JwsJson.General(payload = payload, signatures = signatures)
 
     // Return a ReceivedRequest.Signed with the JwsJson.General object
-    return ReceivedRequest.Signed(jwsJson)
+    return ReceivedRequest.MultiSigned(jwsJson)
 }
 
 private class SchemeSigner(
