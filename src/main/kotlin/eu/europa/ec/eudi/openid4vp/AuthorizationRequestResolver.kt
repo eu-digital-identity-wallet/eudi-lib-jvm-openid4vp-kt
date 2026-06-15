@@ -531,13 +531,24 @@ fun interface AuthorizationRequestOverHttpResolver {
     suspend fun resolveRequestUri(uri: String): Resolution
 }
 
+/**
+ * A functional interface for resolving and validating authorization requests received via the
+ * Digital Credential API (DC API) channel. The implementation of this interface processes the
+ * given request data and produces a [Resolution] result, indicating whether the request was successfully
+ * validated and resolved into a [ResolvedRequestObject] or failed with an associated error.
+ */
 fun interface AuthorizationRequestOverDCApiResolver {
 
     /**
-     * Tries to validate an authorization request received via the Digital Credential API channel into a [ResolvedRequestObject].
+     * Resolves and validates an authorization request received via the Digital Credential API (DC API) channel.
+     * Processes the request data and produces a [Resolution] indicating whether the operation was successful.
      *
-     * @param origin The origin of the request
-     * @param requestData The request data as a JsonObject
+     * @param protocol The protocol associated with the request, typically specifying the communication protocol or type.
+     * @param origin The origin or source of the request, used to validate the request's sender or context.
+     * @param requestData The raw request data encapsulated as a [JsonObject], which contains the payload to be processed.
+     * @return A [Resolution] representing the outcome of the resolution process:
+     *         [Resolution.Success] if the request was successfully validated and resolved,
+     *         or [Resolution.Invalid] if the resolution failed due to an error.
      */
     suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution
 }
