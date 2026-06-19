@@ -32,6 +32,7 @@ interface ErrorDispatcher {
         is ResponseMode.QueryJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
         is ResponseMode.Fragment -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
         is ResponseMode.FragmentJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
+        else -> error("Unsupported response mode: ${errorDispatchDetails.responseMode} for error dispatching over HTTP")
     }
 
     /**

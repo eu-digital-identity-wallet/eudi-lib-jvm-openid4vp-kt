@@ -50,12 +50,12 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<J
             VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
         if (permitsSignedRequestObjects) {
             putJsonArray(REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED) {
-                cfg.jarConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
+                cfg.signedRequestConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }
             }
         }
 
         // Encryption
-        cfg.jarConfiguration.supportedRequestUriMethods.isPostSupported()?.let { requestUriMethodPost ->
+        cfg.signedRequestConfiguration.supportedRequestUriMethods.isPostSupported()?.let { requestUriMethodPost ->
             val jarEncryption = requestUriMethodPost.jarEncryption
             if (jarEncryption is EncryptionRequirement.Required && keys.isNotEmpty()) {
                 put(JWKS, JWKSet(keys).toJSONObject(true).toJsonObject())
@@ -109,4 +109,5 @@ internal val ClientIdPrefix.metadataValue: String
         VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
         X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
         X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
+        ORIGIN -> OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN
     }

@@ -132,6 +132,12 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
                 is InvalidVerifierInfo,
                 MissingClientMetadataJwks,
                 is ClientMetadataJwksUnparsable,
+                MissingExpectedOrigins,
+                MultiSignedRequestsNotSupported,
+                NoMatchingClientPrefixInMultiSignedRequest,
+                UnexpectedOrigin,
+                UnsupportedDcApiExchangeProtocol,
+                is DcApiExchangeProtocolNotMatchesReceivedRequest,
                 -> INVALID_REQUEST
 
                 InvalidClientId, UnsupportedClientIdPrefix -> INVALID_CLIENT

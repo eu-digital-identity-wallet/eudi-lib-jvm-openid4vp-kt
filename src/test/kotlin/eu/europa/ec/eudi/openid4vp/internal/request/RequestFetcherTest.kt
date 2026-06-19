@@ -25,6 +25,7 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.internal.JwsJson.Companion.flatten
 import io.ktor.client.engine.mock.*
 import io.ktor.client.request.*
 import io.ktor.client.request.forms.*
@@ -186,7 +187,7 @@ internal class RequestFetcherTest {
 
 private fun config(clientId: String, jarEncryptionRequirement: EncryptionRequirement): OpenId4VPConfig =
     OpenId4VPConfig(
-        jarConfiguration = JarConfiguration(
+        signedRequestConfiguration = SignedRequestConfiguration(
             supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
             supportedRequestUriMethods = SupportedRequestUriMethods.Post(
                 includeWalletMetadata = true,
@@ -287,4 +288,9 @@ private fun MockEngine(
         val walletNonce = assertIs<String>(body.formData[OpenId4VPSpec.WALLET_NONCE])
 
         handler(encryptionKey, walletNonce)
+    }
+
+internal fun ReceivedRequest.Signed.toSignedJwts(): List<SignedJWT> =
+    jwsJson.flatten().map {
+        SignedJWT.parse("${it.protected}.${it.payload}.${it.signature}")
     }
