@@ -41,8 +41,8 @@ class WalletMetaDataTest {
                     ),
                 ),
             ),
-            jarConfiguration = JarConfiguration(
-                supportedAlgorithms = JarConfiguration.Default.supportedAlgorithms,
+            signedRequestConfiguration = SignedRequestConfiguration(
+                supportedAlgorithms = SignedRequestConfiguration.Default.supportedAlgorithms,
                 supportedRequestUriMethods = SupportedRequestUriMethods.Post(
                     jarEncryption = EncryptionRequirement.Required(
                         supportedEncryptionAlgorithms = EncryptionRequirement.Required.SUPPORTED_ENCRYPTION_ALGORITHMS,
@@ -68,8 +68,8 @@ class WalletMetaDataTest {
                     ),
                 ),
             ),
-            jarConfiguration = JarConfiguration(
-                supportedAlgorithms = JarConfiguration.Default.supportedAlgorithms,
+            signedRequestConfiguration = SignedRequestConfiguration(
+                supportedAlgorithms = SignedRequestConfiguration.Default.supportedAlgorithms,
                 supportedRequestUriMethods = SupportedRequestUriMethods.Get,
             ),
         )
@@ -108,7 +108,7 @@ class WalletMetaDataTest {
 
 private suspend fun assertMetadata(config: OpenId4VPConfig, clientId: String) {
     val (encryptionRequirement, ephemeralJarEncryptionJwks) =
-        config.jarConfiguration.supportedRequestUriMethods.isPostSupported()
+        config.signedRequestConfiguration.supportedRequestUriMethods.isPostSupported()
             ?.let { requestUriMethodPost ->
                 when (val jarEncryption = requestUriMethodPost.jarEncryption) {
                     EncryptionRequirement.NotRequired -> jarEncryption to null
@@ -130,7 +130,7 @@ private suspend fun assertMetadata(config: OpenId4VPConfig, clientId: String) {
 }
 
 private fun assertJarSigning(config: OpenId4VPConfig, clientId: String, walletMetaData: JsonObject) {
-    val supportedAlgorithms = config.jarConfiguration.supportedAlgorithms
+    val supportedAlgorithms = config.signedRequestConfiguration.supportedAlgorithms
     val permitsSignedRequestObjects = VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
     val algs = walletMetaData["request_object_signing_alg_values_supported"]
     if (permitsSignedRequestObjects) {
