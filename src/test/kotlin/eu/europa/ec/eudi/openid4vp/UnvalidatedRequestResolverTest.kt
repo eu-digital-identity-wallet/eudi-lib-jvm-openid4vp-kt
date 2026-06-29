@@ -1055,6 +1055,7 @@ class UnvalidatedRequestResolverTest {
         fun `if request is multi-signed, if no matching client authentication present, resolution fails`() = runTest {
             val request = UnvalidatedRequestObject(
                 responseMode = "dc_api",
+                responseType = "vp_token",
                 nonce = "nonce",
                 dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
                 expectedOrigins = listOf("test_origin", "test_origin_alt"),
@@ -1074,6 +1075,32 @@ class UnvalidatedRequestResolverTest {
             )
 
             resolution.assertIsInvalid<RequestValidationError.NoMatchingClientPrefixInMultiSignedRequest>()
+        }
+
+        @Test
+        fun `if request is multi-signed, if no matching expected origin present, resolution fails`() = runTest {
+            val request = UnvalidatedRequestObject(
+                responseMode = "dc_api",
+                responseType = "vp_token",
+                nonce = "nonce",
+                dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
+                expectedOrigins = listOf("test_origin", "test_origin_alt"),
+            ).multiSigned(
+                listOf(
+                    didSigner(didAlgAndKey),
+                ),
+            )
+            val requestData = buildJsonObject {
+                put("request", Json.encodeToJsonElement(request.jwsJson))
+            }
+
+            val resolution = resolver.resolveRequestObject(
+                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_MULTISIGNED,
+                "other_origin",
+                requestData.jsonObject,
+            )
+
+            resolution.assertIsInvalid<UnexpectedOrigin>()
         }
     }
 

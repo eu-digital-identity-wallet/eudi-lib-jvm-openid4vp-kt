@@ -61,7 +61,7 @@ internal class DefaultRequestResolverOverDCApi(
             exchangeProtocol assertMatches receivedRequest
 
             val authenticatedRequest = authenticateRequest(origin, receivedRequest)
-            val resolved = validateRequestObject(origin, authenticatedRequest, receivedRequest is Signed)
+            val resolved = validateRequestObject(origin, authenticatedRequest, receivedRequest.isSigned)
 
             return Resolution.Success(resolved)
         } catch (e: AuthorizationRequestException) {
