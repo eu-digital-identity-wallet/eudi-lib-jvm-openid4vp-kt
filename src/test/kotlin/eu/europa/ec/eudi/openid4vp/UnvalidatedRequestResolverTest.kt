@@ -35,11 +35,7 @@ import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.dcql.QueryId
 import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
-import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
-import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
-import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
-import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedRequestObject
-import eu.europa.ec.eudi.openid4vp.internal.request.randomKey
+import eu.europa.ec.eudi.openid4vp.internal.request.*
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -48,7 +44,6 @@ import kotlinx.coroutines.test.runTest
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.MissingFieldException
 import kotlinx.serialization.SerializationException
-import kotlinx.serialization.decodeFromString
 import kotlinx.serialization.json.*
 import org.apache.http.NameValuePair
 import org.apache.http.client.utils.URIBuilder
@@ -66,6 +61,7 @@ import java.time.Clock
 import java.util.*
 import kotlin.collections.List
 import kotlin.collections.emptyMap
+import kotlin.collections.filter
 import kotlin.collections.first
 import kotlin.collections.forEach
 import kotlin.collections.indices
@@ -786,6 +782,7 @@ class UnvalidatedRequestResolverTest {
         fun `nonce is mandatory to exist`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "dc_api")
+                put("response_type", "vp_token")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
             }
@@ -802,6 +799,7 @@ class UnvalidatedRequestResolverTest {
         fun `response_mode must be dc_api or dc_api jwt`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "fragment")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
@@ -816,28 +814,10 @@ class UnvalidatedRequestResolverTest {
         }
 
         @Test
-        fun `response_type is ignored if provided in request`() = runTest {
-            val requestData = buildJsonObject {
-                put("response_type", "id_token")
-                put("response_mode", "dc_api")
-                put("nonce", "n-0S6_WzA2Mj")
-                put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
-                put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
-            }
-            val resolution = resolver.resolveRequestObject(
-                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED,
-                "test_origin",
-                requestData,
-            )
-            val request = resolution.assertIsSuccess()
-            assertIs<Client.Origin>(request.client)
-            assertEquals("test_origin", request.client.clientId)
-        }
-
-        @Test
         fun `and no presentation query passed, resolution fails`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "dc_api")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
             }
@@ -853,6 +833,7 @@ class UnvalidatedRequestResolverTest {
         fun `if response_mode is dc_api jwt, client metadata must be included in request`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "dc_api.jwt")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
             }
@@ -886,6 +867,7 @@ class UnvalidatedRequestResolverTest {
             val requestData = buildJsonObject {
                 put("client_id", "client_id")
                 put("response_mode", "dc_api")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
@@ -904,6 +886,7 @@ class UnvalidatedRequestResolverTest {
         fun `client_id is not mandatory to exist in unsigned request over DC API`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "dc_api")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
@@ -922,6 +905,7 @@ class UnvalidatedRequestResolverTest {
         fun `verifier attestations are parsed correctly`() = runTest {
             val requestData = buildJsonObject {
                 put("response_mode", "dc_api")
+                put("response_type", "vp_token")
                 put("nonce", "n-0S6_WzA2Mj")
                 put("dcql_query", jsonSupport.decodeFromString<JsonObject>(dcqlQuery))
                 put("client_metadata", jsonSupport.decodeFromString<JsonObject>(clientMetadata))
@@ -1044,6 +1028,7 @@ class UnvalidatedRequestResolverTest {
         fun `if request is multi-signed, client in resolved request object must match wallet's configuration`() = runTest {
             val request = UnvalidatedRequestObject(
                 responseMode = "dc_api",
+                responseType = "vp_token",
                 nonce = "nonce",
                 dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
                 expectedOrigins = listOf("test_origin", "test_origin_alt"),
