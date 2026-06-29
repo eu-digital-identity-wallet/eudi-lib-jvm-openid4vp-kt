@@ -30,7 +30,8 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
 
     fun validateDCApiRequestObject(origin: String, request: AuthenticatedRequest, isSigned: Boolean): ResolvedRequestObject {
         val (client, requestObject) = request
-        val state = requestObject.state
+
+        ensureVpTokenResponseType(requestObject)
         val nonce = requiredNonce(requestObject)
         val scope = requiredScope(requestObject)
         val nonOpenIdScope = with(Scope) { scope.getOrNull()?.items()?.filter { it != OpenId }?.mergeOrNull() }
@@ -46,13 +47,13 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
         return ResolvedRequestObject(
             client = client.toClient(),
             responseMode = responseMode,
-            state = state,
             nonce = nonce,
             responseEncryptionSpecification = clientMetaData?.responseEncryptionSpecification,
             vpFormatsSupported = clientMetaData?.vpFormatsSupported,
             query = query,
             transactionData = transactionData,
             verifierInfo = verifierInfo,
+            state = null,
         )
     }
 
@@ -281,7 +282,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
      * Makes sure that [unvalidated] contains a not-null scope
      *
      * @param unvalidated the request to validate
-     * @return the scope or [RequestValidationError.MissingScope]
+     * @return the scope or [MissingScope]
      */
     private fun requiredScope(unvalidated: UnvalidatedRequestObject): Result<Scope> {
         val scope = unvalidated.scope?.let { Scope.make(it) }
@@ -293,7 +294,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
      * Makes sure that [unvalidated] contains a not-null nonce
      *
      * @param unvalidated the request to validate
-     * @return the nonce or [RequestValidationError.MissingNonce]
+     * @return the nonce or [MissingNonce]
      */
     private fun requiredNonce(unvalidated: UnvalidatedRequestObject): String =
         ensureNotNull(unvalidated.nonce) { MissingNonce.asException() }
@@ -301,7 +302,6 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
     /**
      * Verifier that [unvalidated] contains the supported `vp_token` `response_type`.
      *
-     * @throws [RequestValidationError.MissingResponseType] if [unvalidated] contains no `response_type`
      * @throws [RequestValidationError.UnsupportedResponseType] if [unvalidated] contains an unsupported `response_type`
      */
     private fun ensureVpTokenResponseType(unvalidated: UnvalidatedRequestObject) {
