@@ -51,7 +51,15 @@ internal sealed interface ReceivedRequest {
             operator fun invoke(signedJwt: SignedJWT): Signed = Signed(JwsJson.from(signedJwt).getOrThrow())
         }
     }
+
     data class MultiSigned(val jwsJson: JwsJson.General) : ReceivedRequest
+
+    val isSigned: Boolean
+        get() = when (this) {
+            is Signed -> true
+            is MultiSigned -> true
+            else -> false
+        }
 
     companion object
 }

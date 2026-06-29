@@ -328,6 +328,11 @@ sealed interface SupportedRequestUriMethods {
     }
 }
 
+/**
+ * Defines a policy for handling multi-signed authorization requests within the system.
+ * This sealed interface is used to indicate how the client should handle such requests
+ * based on different scenarios or restrictions.
+ */
 sealed interface MultiSignedRequestsPolicy {
 
     data class Expect(val clientPrefix: ClientIdPrefix) : MultiSignedRequestsPolicy
@@ -340,6 +345,7 @@ sealed interface MultiSignedRequestsPolicy {
  *
  * @param supportedAlgorithms the algorithms supported for the signature of the JAR
  * @param supportedRequestUriMethods which of the `request_uri_method` methods are supported
+ * @param multiSignedRequestsPolicy whether the wallet supports multi-signed requests and if so, what is the expected client prefix
  */
 data class SignedRequestConfiguration(
     val supportedAlgorithms: List<JWSAlgorithm>,
