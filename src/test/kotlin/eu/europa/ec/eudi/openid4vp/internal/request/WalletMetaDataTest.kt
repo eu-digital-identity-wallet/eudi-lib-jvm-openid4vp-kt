@@ -191,7 +191,7 @@ private fun assertClientIdPrefix(
     if (supportedClientIdPrefixes.isNotEmpty()) {
         assertIs<JsonArray>(prefixes)
         assertContentEquals(
-            supportedClientIdPrefixes.map { it.prefix().metadataValue },
+            supportedClientIdPrefixes.map { it.metadataValue() },
             prefixes.mapNotNull { it.jsonPrimitive.contentOrNull },
         )
     } else {
