@@ -104,7 +104,7 @@ val httpClient = HttpClient {
 }
 
 // To handle requests coming through the http channel
-val openId4VpOverHttp = OpenId4Vp.overRedirects(walletConfig, httpClient)
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
 
 // To handle requests coming through the DC-API channel
 val openId4VpOverDcApi = OpenId4Vp.overDcApi(walletConfig, httpClient)
@@ -133,9 +133,9 @@ import eu.europa.ec.eudi.openid4vp.*
 
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val openId4VpOverHttp = OpenId4Vp.overRedirects(walletConfig, httpClient)
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
 
-val resolution = openId4VpOverHttp.resolveRequestUri(authorizationRequestUri)
+val resolution = openId4VpOverRedirects.resolveRequestUri(authorizationRequestUri)
 val requestObject = when (resolution) {
     is Resolution.Invalid -> throw resolution.error.asException()
     is Resolution.Success -> resolution.requestObject
@@ -160,7 +160,7 @@ Depending on the `response_mode` that the verifier included in his authorization
 * either a direct post (when `response_mode` is `direct_post` or `direct_post.jwt`), or
 * by forming an appropriate `redirect_uri` (when response mode is `fragment`, `fragment.jwt`, `query` or `query.jwt`)
 
-The library tackles this dispatching via [Dispatcher](src/main/kotlin/eu/europa/ec/eudi/openid4vp/ResponseDispatcher.kt)
+The library tackles this dispatching via [DispatcherOverHttp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/ResponseDispatching.kt)
 
 Please note that in case of `response_mode` `direct_post` or `direct_post.jwt` the library actually performs the
 actual HTTP call against the verifier's receiving end-point.
@@ -169,13 +169,13 @@ just forms an appropriate redirect URI.
 It is the caller's responsibility to redirect the user to this URI.
 
 ```kotlin
-val openId4VpOverHttp = OpenId4Vp.overRedirects(walletConfig, httpClient)
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
 
 val requestObject // calculated in previous step
 val verifiablePresentations: VerifiablePresentations // provided by wallet
 val consensus =  Consensus.PositiveConsensus(verifiablePresentations)
 
-val dispatchOutcome = openId4VpOverHttp.dispatch(requestObject, consensus)
+val dispatchOutcome = openId4VpOverRedirects.dispatch(requestObject, consensus)
 ```
 
 #### Dispatch authorization error response to verifier / RP
@@ -208,16 +208,16 @@ It is the caller's responsibility to redirect the user to this URI.
 ```kotlin
 import eu.europa.ec.eudi.openid4vp.*
 
-val openId4VpOverHttp = OpenId4Vp.overRedirects(walletConfig, httpClient)
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
 
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val resolution = openId4VpOverHttp.resolveRequestUri(authorizationRequestUri)
+val resolution = openId4VpOverRedirects.resolveRequestUri(authorizationRequestUri)
 if (resolution is Resolution.Invalid) {
   val (error, errorDispatchDetails) = resolution.error
   errorDispatchDetails?.let {
     val encryptionParameters: EncryptionParameters = TODO()
-    val dispatchOutcome = openId4VpOverHttp.dispatchError(error, it, encryptionParameters)
+    val dispatchOutcome = openId4VpOverRedirects.dispatchError(error, it, encryptionParameters)
     when (dispatchOutcome) {
       is DispatchOutcome.RedirectURI -> TODO("Caller must redirect the user to '${dispatchOutcome.value}'")
       is DispatchOutcome.VerifierResponse.Accepted -> TODO("Verifier/RP successfully received authorization error response. Caller must redirect user to '${dispatchOutcome.redirectURI}'")

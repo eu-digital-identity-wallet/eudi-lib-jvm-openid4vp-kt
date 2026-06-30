@@ -377,7 +377,7 @@ private class JarJwtSignatureVerifier(
                 jwsTypeVerifier = DefaultJOSEObjectTypeVerifier(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
                 jwsKeySelector = jwsKeySelector(client)
                 jwtClaimsSetVerifier =
-                    TimeChecks(openId4VPConfig.clock, openId4VPConfig.jarClockSkew.toKotlinDuration())
+                    TimeChecks(openId4VPConfig.clock, openId4VPConfig.signedRequestConfiguration.clockSkew.toKotlinDuration())
             }
             jwtProcessor.process(signedJwt, null)
         } catch (e: JOSEException) {

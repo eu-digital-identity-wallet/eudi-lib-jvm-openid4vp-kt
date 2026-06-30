@@ -355,11 +355,13 @@ sealed interface MultiSignedRequestsPolicy {
  * @param supportedAlgorithms the algorithms supported for the signature of the JAR
  * @param supportedRequestUriMethods which of the `request_uri_method` methods are supported
  * @param multiSignedRequestsPolicy whether the wallet supports multi-signed requests and if so, what is the expected client prefix
+ * @param clockSkew max acceptable skew between wallet and verifier when performing request signature validation
  */
 data class SignedRequestConfiguration(
     val supportedAlgorithms: List<JWSAlgorithm>,
     val supportedRequestUriMethods: SupportedRequestUriMethods = SupportedRequestUriMethods.Default,
     val multiSignedRequestsPolicy: MultiSignedRequestsPolicy = MultiSignedRequestsPolicy.NotSupported,
+    val clockSkew: Duration = Duration.ofSeconds(15L),
 ) {
     init {
         require(supportedAlgorithms.isNotEmpty()) { "JAR signing algorithms cannot be empty" }
@@ -408,7 +410,6 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * [ResponseEncryptionConfiguration.NotSupported].
  * @param vpConfiguration options about OpenId4VP.
  * @param clock the system Clock. If not provided system's default clock will be used.
- * @param jarClockSkew max acceptable skew between wallet and verifier
  * @param supportedClientIdPrefixes the client id prefixes that are supported/trusted by the wallet
  * @param errorDispatchPolicy wallet's policy regarding error dispatching. Defaults to [ErrorDispatchPolicy.OnlyAuthenticatedClients].
  */
@@ -418,7 +419,6 @@ data class OpenId4VPConfig(
     val responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
     val vpConfiguration: VPConfiguration,
     val clock: Clock = Clock.systemDefaultZone(),
-    val jarClockSkew: Duration = Duration.ofSeconds(15L),
     val supportedClientIdPrefixes: List<SupportedClientIdPrefix>,
     val errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
 ) {
@@ -440,7 +440,6 @@ data class OpenId4VPConfig(
         responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
         vpConfiguration: VPConfiguration,
         clock: Clock = Clock.systemDefaultZone(),
-        jarClockSkew: Duration = Duration.ofSeconds(15L),
         errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
         vararg supportedClientIdPrefixes: SupportedClientIdPrefix,
     ) : this(
@@ -449,7 +448,6 @@ data class OpenId4VPConfig(
         responseEncryptionConfiguration,
         vpConfiguration,
         clock,
-        jarClockSkew,
         supportedClientIdPrefixes.toList(),
         errorDispatchPolicy,
     )
