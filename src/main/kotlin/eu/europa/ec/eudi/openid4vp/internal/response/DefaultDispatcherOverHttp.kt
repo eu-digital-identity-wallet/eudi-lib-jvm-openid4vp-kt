@@ -28,11 +28,11 @@ import java.net.URI
 import java.net.URL
 
 /**
- * Default implementation of [Dispatcher]
+ * Default implementation of [DispatcherOverHttp]
  */
-internal class DefaultDispatcher(
+internal class DefaultDispatcherOverHttp(
     private val httpClient: HttpClient,
-) : Dispatcher, ErrorDispatcher {
+) : DispatcherOverHttp, ErrorDispatcher {
 
     override suspend fun post(
         request: ResolvedRequestObject,
@@ -183,40 +183,10 @@ internal fun FragmentJwt.encodeRedirectURI(): URI =
  */
 internal object DirectPostForm {
 
-    private const val VP_TOKEN_FORM_PARAM = "vp_token"
-    private const val STATE_FORM_PARAM = "state"
-    private const val ERROR_FORM_PARAM = "error"
-    private const val ERROR_DESCRIPTION_FORM_PARAM = "error_description"
-
     fun parametersOf(p: AuthorizationResponsePayload): Parameters =
-        of(p).let { form ->
+        p.asDispatchingMap().let { map ->
             parameters {
-                form.entries.forEach { (name, value) -> append(name, value) }
-            }
-        }
-
-    fun of(p: AuthorizationResponsePayload): Map<String, String> =
-        when (p) {
-            is AuthorizationResponsePayload.Success -> buildMap {
-                put(VP_TOKEN_FORM_PARAM, p.verifiablePresentations.asParam())
-                p.state?.let {
-                    put(STATE_FORM_PARAM, it)
-                }
-            }
-
-            is AuthorizationResponsePayload.InvalidRequest -> buildMap {
-                put(ERROR_FORM_PARAM, AuthorizationRequestErrorCode.fromError(p.error).code)
-                put(ERROR_DESCRIPTION_FORM_PARAM, "${p.error}")
-                p.state?.let {
-                    put(STATE_FORM_PARAM, it)
-                }
-            }
-
-            is AuthorizationResponsePayload.NoConsensusResponseData -> buildMap {
-                put(ERROR_FORM_PARAM, AuthorizationRequestErrorCode.ACCESS_DENIED.code)
-                p.state?.let {
-                    put(STATE_FORM_PARAM, it)
-                }
+                map.entries.forEach { (name, value) -> append(name, value) }
             }
         }
 }

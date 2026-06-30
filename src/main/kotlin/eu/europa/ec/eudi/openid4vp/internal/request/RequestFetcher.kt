@@ -64,7 +64,7 @@ internal class RequestFetcher(
         val (_, requestUri, requestUriMethod) = request
 
         val supportedMethods =
-            openId4VPConfig.jarConfiguration.supportedRequestUriMethods
+            openId4VPConfig.signedRequestConfiguration.supportedRequestUriMethods
         val postOptions = supportedMethods.isPostSupported()
 
         suspend fun useGET(): Pair<Jwt, Nonce?> {
@@ -138,7 +138,7 @@ private fun OpenId4VPConfig.ensureSupportedSigningAlgorithm(signedJwt: SignedJWT
     val signingAlg = ensureNotNull(signedJwt.header.algorithm) {
         invalidJwt("JAR is missing alg claim from header")
     }
-    ensure(signingAlg in jarConfiguration.supportedAlgorithms) {
+    ensure(signingAlg in signedRequestConfiguration.supportedAlgorithms) {
         invalidJwt("JAR is signed with ${signingAlg.name} which is not supported")
     }
 }

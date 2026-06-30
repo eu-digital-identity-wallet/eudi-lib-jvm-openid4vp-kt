@@ -10,11 +10,15 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 * [Overview](#overview)
 * [Disclaimer](#disclaimer)
 * [How to use](#how-to-use)
-  * [Resolve an authorization request URI](#resolve-an-authorization-request-uri)
-  * [Holder's consensus, Handling of a valid authorization request](#holders-consensus-handling-of-a-valid-authorization-request)
-  * [Dispatch authorization response to verifier / RP](#dispatch-authorization-response-to-verifier--rp)
-  * [Dispatch authorization error response to verifier / RP](#dispatch-authorization-error-response-to-verifier--rp)
-  * [Example](#example)
+    * [Openid4VP via http](#openid4vp-via-http-redirects)
+      * [Resolve an authorization request URI](#resolve-an-authorization-request-uri)
+      * [Holder's consensus, Handling of a valid authorization request](#holders-consensus-handling-of-a-valid-authorization-request)
+      * [Dispatch authorization response to verifier / RP](#dispatch-authorization-response-to-verifier--rp)
+      * [Dispatch authorization error response to verifier / RP](#dispatch-authorization-error-response-to-verifier--rp)
+    * [Openid4VP via DC-API](#openid4vp-via-dc-api)
+      * [Resolve an authorization request](#resolve-an-authorization-request)
+      * [Assemble an authorization response](#assemble-an-authorization-response)
+    * [Example](#example)
 * [OpenId4VP features supported](#openid4vp-features-supported)
 * [How to contribute](#how-to-contribute)
 * [License](#license)
@@ -36,10 +40,10 @@ In particular, the library focuses on the wallet's role using this protocol, and
 | [Dispatch positive and negative responses](#dispatch-authorization-response-to-verifier--rp)                              | ✅                                                                                                                                      |
 | [Dispatch authorization error response to verifier when possible](#dispatch-authorization-error-response-to-verifier--rp) | ✅                                                                                                                                      |
 | Encrypted authorization responses                                                                                         | ✅                                                                                                                                      |
-| Response modes                                                                                                            | ✅ direct_post, ✅ direct_post.jwt, ✅ query, ✅ query.jwt, ✅ fragment, ✅ fragment.jwt                                                     |
+| Response modes                                                                                                            | ✅ direct_post, ✅ direct_post.jwt, ✅ query, ✅ query.jwt, ✅ fragment, ✅ fragment.jwt, ✅ dc_api, ✅ dc_api.jwt                             |
 | Transaction Data                                                                                                          | ✅                                                                                                                                      |
 | Verifier Attestation JWT                                                                                                  | ✅                                                                                                                                      |
-| Digital Credential API                                                                                                    | ❌                                                                                                                                      |
+| Digital Credential API                                                                                                    | ✅                                                                                                                                      |
 
 ## Disclaimer
 
@@ -77,11 +81,15 @@ dependencies {
 }
 ```
 
-The entry point to the library is the interface [OpenId4Vp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/OpenId4Vp.kt)
-Currently, the library offers an implementation of this interface based on [Ktor](https://ktor.io/) Http Client.
+The library distinguishes 2 channels via which an authorization request can be received
+- Via http (redirects) 
+- Via [DC-API](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#appendix-A)
+
+The entry point to the library is the interface [OpenId4Vp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/OpenId4Vp.kt).
+Currently, the library offers two implementations of this interface based on [Ktor](https://ktor.io/) Http Client.
 Ktor is built from the ground up using Kotlin and Coroutines.
 
-An instance of the interface can be obtained with the following code
+Depending on the channel via which the request is received, an instance of the interface can be obtained with the following code
 
 ```kotlin
 import eu.europa.ec.eudi.openid4vp.*
@@ -95,10 +103,16 @@ val httpClient = HttpClient {
   expectSuccess = true
 }
 
-val openId4Vp = OpenId4Vp(walletConfig, httpClient)
+// To handle requests coming through the http channel
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
+
+// To handle requests coming through the DC-API channel
+val openId4VpOverDcApi = OpenId4Vp.overDcApi(walletConfig, httpClient)
 ```
 
-### Resolve an authorization request URI
+### Openid4VP via http (redirects)
+
+#### Resolve an authorization request URI
 
 Wallet receives an OAuth2.0 Authorization request, formed by the Verifier, that represents an
 [OpenID4VP authorization request](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-authorization-request).
@@ -112,21 +126,23 @@ requests mentioned aforementioned) and in addition gather from Verifier addition
 reference (such as `request_uri` etc.)
 
 The interface that captures the aforementioned functionality is
-[AuthorizationRequestResolver](src/main/kotlin/eu/europa/ec/eudi/openid4vp/AuthorizationRequestResolver.kt)
+[AuthorizationRequestOverHttpResolver](src/main/kotlin/eu/europa/ec/eudi/openid4vp/AuthorizationRequestResolver.kt)
 
 ```kotlin
 import eu.europa.ec.eudi.openid4vp.*
 
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val resolution = openId4Vp.resolveRequestUri(authorizationRequestUri)
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
+
+val resolution = openId4VpOverRedirects.resolveRequestUri(authorizationRequestUri)
 val requestObject = when (resolution) {
     is Resolution.Invalid -> throw resolution.error.asException()
     is Resolution.Success -> resolution.requestObject
 }
-
 ```
-### Holder's consensus, Handling of a valid authorization request
+
+#### Holder's consensus, handling of a valid authorization request
 
 After receiving a valid authorization, the wallet has to process it. This means:
 
@@ -135,7 +151,7 @@ After receiving a valid authorization, the wallet has to process it. This means:
 
 This functionality is a wallet concern, and it is not supported directly by the library
 
-### Dispatch authorization response to verifier / RP
+#### Dispatch authorization response to verifier / RP
 
 After collecting holder's consensus, wallet can use the library to form an appropriate response and then dispatch it
 to the verifier.
@@ -144,7 +160,7 @@ Depending on the `response_mode` that the verifier included in his authorization
 * either a direct post (when `response_mode` is `direct_post` or `direct_post.jwt`), or
 * by forming an appropriate `redirect_uri` (when response mode is `fragment`, `fragment.jwt`, `query` or `query.jwt`)
 
-The library tackles this dispatching via [Dispatcher](src/main/kotlin/eu/europa/ec/eudi/openid4vp/ResponseDispatcher.kt)
+The library tackles this dispatching via [DispatcherOverHttp](src/main/kotlin/eu/europa/ec/eudi/openid4vp/ResponseDispatching.kt)
 
 Please note that in case of `response_mode` `direct_post` or `direct_post.jwt` the library actually performs the
 actual HTTP call against the verifier's receiving end-point.
@@ -153,13 +169,16 @@ just forms an appropriate redirect URI.
 It is the caller's responsibility to redirect the user to this URI.
 
 ```kotlin
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
+
 val requestObject // calculated in previous step
 val verifiablePresentations: VerifiablePresentations // provided by wallet
 val consensus =  Consensus.PositiveConsensus(verifiablePresentations)
-val dispatchOutcome = openId4Vp.dispatch(requestObject, consensus)
+
+val dispatchOutcome = openId4VpOverRedirects.dispatch(requestObject, consensus)
 ```
 
-### Dispatch authorization error response to verifier / RP
+#### Dispatch authorization error response to verifier / RP
 
 If an error occurs during the resolution of an authorization request URI, either due to the authorization request
 missing required data or being malformed, a Resolution.Invalid is returned. Depending on the type of the
@@ -189,14 +208,16 @@ It is the caller's responsibility to redirect the user to this URI.
 ```kotlin
 import eu.europa.ec.eudi.openid4vp.*
 
+val openId4VpOverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
+
 val authorizationRequestUri : String // obtained via a deep link or scanning a QR code
 
-val resolution = openId4Vp.resolveRequestUri(authorizationRequestUri)
+val resolution = openId4VpOverRedirects.resolveRequestUri(authorizationRequestUri)
 if (resolution is Resolution.Invalid) {
   val (error, errorDispatchDetails) = resolution.error
   errorDispatchDetails?.let {
     val encryptionParameters: EncryptionParameters = TODO()
-    val dispatchOutcome = openId4Vp.dispatchError(error, it, encryptionParameters)
+    val dispatchOutcome = openId4VpOverRedirects.dispatchError(error, it, encryptionParameters)
     when (dispatchOutcome) {
       is DispatchOutcome.RedirectURI -> TODO("Caller must redirect the user to '${dispatchOutcome.value}'")
       is DispatchOutcome.VerifierResponse.Accepted -> TODO("Verifier/RP successfully received authorization error response. Caller must redirect user to '${dispatchOutcome.redirectURI}'")
@@ -206,11 +227,118 @@ if (resolution is Resolution.Invalid) {
 }
 ```
 
+### Openid4VP via DC-API
+
+The diagram below illustrates the interaction of a `Verifier` and a `Wallet` via Verifier's trusted end-point (trusted origin) to perform an OpenId4VP Authorization via DC-API.
+User's agent might also be a mobile app installed in user's device. 
+In both cases the operating system guarantees that the origin of the request (web domain or app package name) cannot be spoofed.
+
+Given that the `Verifier` has prepared the appropriate request, and displayed to `Holder` through holder device's agent (browser) the flow below how the android OS (implements DC-API)
+the EUDI Wallet interact. Also describes the responsibilities of the current library in the process.  
+
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor User as Holder (User)
+    participant Web as Verifier via user's agent<br>(Browser)
+    participant ACM as Android Credential Manager<br>(System OS)
+    participant Wallet as Wallet App<br>(CredentialHandlerActivity)
+    participant lib as OpenId4VP Library
+    
+
+    %% Step 1: Initialization
+    User->>Web: Clicks "Verify Identity"
+    Web->>ACM: navigator.credentials.get()<br>(Sends Request Payload + Origin)
+
+    %% Step 2: System Matching & Chooser
+    Note over ACM: OS validates Web Origin<br>Scans installed apps for matching document types
+    ACM->>User: Displays System Chooser UI<br>(Lists available Wallet Apps)
+    User->>ACM: Selects Your Wallet App
+
+    %% Step 3: Intent Forwarding to Wallet
+    ACM->>Wallet: Launches Activity via System Intent<br>(GET_CREDENTIAL action + Extras payload)
+    
+    %% Step 4: Wallet Internal Processing
+    Wallet->>lib: Forward received request <br/> (origin, protocol, payload)
+    lib->>lib: Validate incoming request
+    lib->>Wallet: validated request    
+    Wallet->>User: Present matched credentials and request user consent 
+    User->>Wallet: Confirms Consent & Triggers Biometrics
+    Wallet->>lib: Pass concent with selected credentials
+    lib->>lib: Prepare vp_token response <br/> (vp_token as JsonObject) 
+    lib->>Wallet: Assembled response
+    
+    %% Step 6: Returning the Data up the chain
+    Wallet->>ACM: setResult(RESULT_OK, resultIntent)<br>(Passes cryptographically signed bundle)
+    Note over Wallet: Wallet Activity finishes/closes
+    ACM->>Web: Delivers credential object to browser
+    Web->>User: Authentication Successful
+
+```
+
+#### Resolve an authorization request
+
+Wallet receives an OAuth2.0 Authorization request, formed by the Verifier, that represents an
+OpenID4VP authorization request, specifically for the case of [DC-API](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html#name-request).
+
+The resolution the authorization request follows the same principled as with the case of requests received via the http channel (redirects).
+1. Wallet should extract from system intent: (a) the protocol, (b) caller's origin and (c) request payload
+2. Use OpenId4Vp.resolveRequestObject passing the above parameters
+3. The result will be either a `Resolution.Success` containing the validated request object or a `Resolution.Invalid` containing the error that occured during the validation. 
+
+The interface that captures the aforementioned functionality is
+[AuthorizationRequestOverDCApiResolver](src/main/kotlin/eu/europa/ec/eudi/openid4vp/AuthorizationRequestResolver.kt)
+
+```kotlin
+import eu.europa.ec.eudi.openid4vp.*
+
+val protocol: String // extracted from the request as it was passed to wallet from the system intent
+val origin: String // extracted from the request as it was passed to wallet from the system intent
+val requestData: JsonObject // extracted from the request as it was passed to wallet from the system intent
+
+val openId4VpOverDcApi = OpenId4Vp.overDcApi(walletConfig, httpClient)
+
+val resolution = openId4VpOverDcApi.resolveRequestObject(protocol, origin, requestData)
+val requestObject = when (resolution) {
+    is Resolution.Invalid -> throw resolution.error.asException()
+    is Resolution.Success -> resolution.requestObject
+}
+```
+
+#### Holder's consensus, handling of a valid authorization request
+
+After receiving a valid authorization, the wallet has to process it. This means:
+
+* wallet should check whether holder has claims that can fulfill verifier's requirements
+* let the holder choose which claims will be presented to the verifier and form a `vp_token`
+
+This functionality is a wallet concern, and it is not supported directly by the library
+
+#### Assemble an authorization response
+
+After collecting holder's consensus, wallet can use the library to form an appropriate response and then pass it to the verifier.
+
+In the case of requests coming through the DC-API channel, the library does not perform the actual dispatching of the response to the verifier
+(as in the case of the http channel).
+Instead, it merely assembles the response and passes it to the caller that is responsible for passing the response to the verifier via 
+an active DC-API channel. 
+
+```kotlin
+val openId4VpOverDcApi = OpenId4Vp.overDcApi(walletConfig, httpClient)
+
+val requestObject // calculated in previous step
+val verifiablePresentations: VerifiablePresentations // provided by wallet
+val consensus =  Consensus.PositiveConsensus(verifiablePresentations)
+
+val response: JsonObject = openId4VpOverDcApi.assembleResponse(requestObject, consensus)
+```
+
 ### Example
 
 Project contains an [example](src/test/kotlin/eu/europa/ec/eudi/openid4vp/Example.kt) which
 demonstrates the functionality of the library and in particular the interaction of a
-`Verifier` and a `Wallet` via Verifier's trusted end-point to perform an OpenId4VP Authorization.
+`Verifier` and a `Wallet` via Verifier's trusted end-point to perform an OpenId4VP Authorization via http.
 
 To run the example, you will need to clone [Verifier's trusted end-point](https://github.com/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt)
 and run it using
@@ -236,6 +364,8 @@ Library currently supports `response_mode`
 * `fragment.jwt`
 * `query`
 * `query.jwt`
+* `dc_api`
+* `dc_api.jwt`
 
 
 ### Supported Client ID Prefixes
@@ -252,7 +382,7 @@ Library requires the presence of a `client_id` using one of the following prefix
 > [!NOTE]
 > The Client ID Prefix is encoded as a prefix in `client_id`. Absence of such a prefix, indicates the usage of the `pre-registered` Client ID Prefix.
 
-### Retrieving Authorization Request
+### Retrieving Authorization Request (http channel case)
 
 According to OpenID4VP, when the `request_uri` parameter is included in the authorization request wallet must fetch the Authorization Request by following this URI.
 In this case there are two methods to get the request, controlled by the `request_uri_method` communicated by the verifier:
@@ -265,7 +395,7 @@ In the later case, based on the configured [SupportedRequestUriMethods](src/main
 
 Library supports both methods.
 
-### Authorization Request encoding
+### Authorization Request encoding (http channel case)
 
 OAUTH2 foresees that `AuthorizationRequest` is encoded as an HTTP GET request which contains specific HTTP parameters.
 
