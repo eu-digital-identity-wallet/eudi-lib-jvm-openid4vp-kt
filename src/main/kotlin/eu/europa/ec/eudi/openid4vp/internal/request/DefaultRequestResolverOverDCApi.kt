@@ -83,7 +83,7 @@ internal class DefaultRequestResolverOverDCApi(
         return requestValidator.validateDCApiRequestObject(origin, authenticatedRequest, isSigned)
     }
 
-    private fun ReceivedRequest.Companion.make(requestData: JsonObject): Result<ReceivedRequest> = runCatching {
+    private fun ReceivedRequest.Companion.make(requestData: JsonObject): Result<ReceivedRequest> = runCatchingCancellable {
         val requestValue = requestData["request"]
         when {
             requestValue != null && requestValue is JsonObject -> {
