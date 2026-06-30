@@ -141,6 +141,15 @@ sealed interface SupportedClientIdPrefix {
         is X509SanDns -> ClientIdPrefix.X509SanDns
         is X509Hash -> ClientIdPrefix.X509Hash
     }
+
+    fun metadataValue(): String = when (this) {
+        is Preregistered -> OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED
+        RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
+        is DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
+        is VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
+        is X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
+        is X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
+    }
 }
 
 /**
