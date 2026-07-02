@@ -153,7 +153,7 @@ interface DispatcherOverHttp {
  * Given a [request][ResolvedRequestObject] send over DC API channel and holder's [consensus][Consensus] this interface
  * assembles an appropriate authorization response.
  */
-interface DispatcherOverDCApi {
+interface DCApiResponseBuilder {
 
     suspend fun assembleResponse(
         request: ResolvedRequestObject,

@@ -21,21 +21,16 @@ import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.JWSVerifier
 import com.nimbusds.jose.crypto.ECDHDecrypter
 import com.nimbusds.jose.jwk.Curve
+import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.oauth2.sdk.id.Issuer
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
-import kotlinx.serialization.json.JsonObject
 import java.net.URI
 import java.security.PublicKey
 import java.security.cert.X509Certificate
 import java.time.Clock
 import java.time.Duration
-
-sealed interface JwkSetSource {
-    data class ByValue(val jwks: JsonObject) : JwkSetSource
-    data class ByReference(val jwksUri: URI) : JwkSetSource
-}
 
 /**
  * The out-of-band knowledge of a Verifier, used in [SupportedClientIdPrefix.Preregistered]
@@ -43,14 +38,22 @@ sealed interface JwkSetSource {
  * @param clientId the client id of a trusted verifier
  * @param legalName the name of the trusted verifier
  * @param jarConfig in case, verifier communicates his request using JAR, the signing algorithm
- * that is uses to sign his request and a [way][JwkSetSource] to get his public key
+ * that is used to sign his request and his available public keys in form of a JWKSet
  *
  */
 data class PreregisteredClient(
     val clientId: OriginalClientId,
     val legalName: String,
-    val jarConfig: Pair<JWSAlgorithm, JwkSetSource>? = null,
-)
+    val jarConfig: Pair<JWSAlgorithm, JWKSet>? = null,
+) {
+    init {
+        if (jarConfig != null) {
+            require(!jarConfig.second.isEmpty) { "JWKSet cannot be empty" }
+            val allKeysArePublic = jarConfig.second.keys.all { it.isPrivate == false }
+            require(allKeysArePublic) { "JWKSet must contain only public keys" }
+        }
+    }
+}
 
 fun interface X509CertificateTrust {
     fun isTrusted(chain: List<X509Certificate>): Boolean

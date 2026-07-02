@@ -20,9 +20,7 @@ import com.nimbusds.jose.JOSEObjectType
 import com.nimbusds.jose.JWSHeader
 import com.nimbusds.jose.jwk.AsymmetricJWK
 import com.nimbusds.jose.jwk.JWK
-import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.source.ImmutableJWKSet
-import com.nimbusds.jose.jwk.source.JWKSource
 import com.nimbusds.jose.proc.*
 import com.nimbusds.jose.shaded.gson.Gson
 import com.nimbusds.jose.util.JSONObjectUtils
@@ -39,10 +37,6 @@ import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.Preregistered
 import eu.europa.ec.eudi.openid4vp.internal.*
 import eu.europa.ec.eudi.openid4vp.internal.JwsJson.Companion.flatten
 import eu.europa.ec.eudi.openid4vp.internal.request.AuthenticatedClient.*
-import io.ktor.client.*
-import io.ktor.client.call.*
-import io.ktor.client.plugins.*
-import io.ktor.client.request.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
@@ -73,13 +67,14 @@ internal data class AuthenticatedRequest(
     val requestObject: UnvalidatedRequestObject,
 )
 
-internal class RequestAuthenticator(openId4VPConfig: OpenId4VPConfig, httpClient: HttpClient) {
-    private val clientAuthenticator = ClientAuthenticator(openId4VPConfig)
-    private val signatureVerifier = JarJwtSignatureVerifier(openId4VPConfig, httpClient)
+internal class RequestAuthenticator private constructor(
+    private val clientAuthenticator: ClientAuthenticator,
+    private val signatureVerifier: JarJwtSignatureVerifier,
+) {
 
-    suspend fun authenticateRequestOverDCApi(origin: String, request: ReceivedRequest): AuthenticatedRequest = coroutineScope {
+    suspend fun authenticateRequestOverDCApi(origin: String, request: ReceivedRequest): AuthenticatedRequest {
         val (client, signedJwt) = clientAuthenticator.authenticateClientOverDCApi(origin, request)
-        when (request) {
+        return when (request) {
             is ReceivedRequest.Unsigned -> {
                 AuthenticatedRequest(client, request.requestObject)
             }
@@ -115,6 +110,13 @@ internal class RequestAuthenticator(openId4VPConfig: OpenId4VPConfig, httpClient
                 error("Multisigned requests are not expected over redirects.")
             }
         }
+    }
+
+    companion object {
+        operator fun invoke(openId4VPConfig: OpenId4VPConfig) = RequestAuthenticator(
+            clientAuthenticator = ClientAuthenticator(openId4VPConfig),
+            signatureVerifier = JarJwtSignatureVerifier(openId4VPConfig),
+        )
     }
 }
 
@@ -367,11 +369,10 @@ private fun verifierAttestation(
  */
 private class JarJwtSignatureVerifier(
     private val openId4VPConfig: OpenId4VPConfig,
-    private val httpClient: HttpClient,
 ) {
 
     @Throws(AuthorizationRequestException::class)
-    suspend fun verifySignature(client: AuthenticatedClient, signedJwt: SignedJWT) {
+    fun verifySignature(client: AuthenticatedClient, signedJwt: SignedJWT) {
         try {
             val jwtProcessor = DefaultJWTProcessor<SecurityContext>().apply {
                 jwsTypeVerifier = DefaultJOSEObjectTypeVerifier(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
@@ -388,7 +389,7 @@ private class JarJwtSignatureVerifier(
     }
 
     @Throws(AuthorizationRequestException::class)
-    private suspend fun jwsKeySelector(client: AuthenticatedClient): JWSKeySelector<SecurityContext> =
+    private fun jwsKeySelector(client: AuthenticatedClient): JWSKeySelector<SecurityContext> =
         when (client) {
             is AuthenticatedClient.Preregistered ->
                 getPreRegisteredClientJwsSelector(client)
@@ -413,28 +414,15 @@ private class JarJwtSignatureVerifier(
         }
 
     @Throws(AuthorizationRequestException::class)
-    private suspend fun getPreRegisteredClientJwsSelector(
+    private fun getPreRegisteredClientJwsSelector(
         preregistered: AuthenticatedClient.Preregistered,
     ): JWSVerificationKeySelector<SecurityContext> {
         val trustedClient = preregistered.preregisteredClient
         val jarConfig = checkNotNull(trustedClient.jarConfig)
 
-        val (jarSigningAlg, jwkSetSource) = jarConfig
-        suspend fun getJWKSource(): JWKSource<SecurityContext> {
-            val jwkSet = when (jwkSetSource) {
-                is JwkSetSource.ByValue -> JWKSet.parse(jwkSetSource.jwks.toString())
-                is JwkSetSource.ByReference -> try {
-                    val unparsed = httpClient.get(jwkSetSource.jwksUri.toURL()).body<String>()
-                    JWKSet.parse(unparsed)
-                } catch (e: ClientRequestException) {
-                    throw HttpError(e).asException()
-                }
-            }
-            return ImmutableJWKSet(jwkSet)
-        }
+        val (jarSigningAlg, jwkSet) = jarConfig
 
-        val jwkSource = getJWKSource()
-        return JWSVerificationKeySelector(jarSigningAlg, jwkSource)
+        return JWSVerificationKeySelector(jarSigningAlg, ImmutableJWKSet(jwkSet))
     }
 }
 

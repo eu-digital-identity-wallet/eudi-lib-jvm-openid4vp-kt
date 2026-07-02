@@ -221,8 +221,8 @@ internal class DefaultRequestResolverOverHttp(
         return requestFetcher.fetchRequest(unvalidatedRequest)
     }
 
-    private suspend fun HttpClient.authenticateRequest(receivedRequest: ReceivedRequest): AuthenticatedRequest {
-        val requestAuthenticator = RequestAuthenticator(openId4VPConfig, this)
+    private suspend fun authenticateRequest(receivedRequest: ReceivedRequest): AuthenticatedRequest {
+        val requestAuthenticator = RequestAuthenticator(openId4VPConfig)
         return requestAuthenticator.authenticateRequestOverHttp(receivedRequest)
     }
 }

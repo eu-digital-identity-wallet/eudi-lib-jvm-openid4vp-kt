@@ -17,17 +17,15 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 
 import com.nimbusds.jose.*
 import com.nimbusds.jose.crypto.factories.DefaultJWSSignerFactory
-import com.nimbusds.jose.jwk.Curve
-import com.nimbusds.jose.jwk.ECKey
-import com.nimbusds.jose.jwk.JWK
-import com.nimbusds.jose.jwk.KeyUse
+import com.nimbusds.jose.jwk.*
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jose.util.Base64URL
 import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
-import eu.europa.ec.eudi.openid4vp.internal.*
+import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
+import eu.europa.ec.eudi.openid4vp.internal.DID
+import eu.europa.ec.eudi.openid4vp.internal.JwsJson
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.Json
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.assertThrows
@@ -138,12 +136,12 @@ class ClientAuthenticatorOverHTTPTest {
         private val preRegisteredClient = PreregisteredClient(
             "testPreRegistered",
             "Test Pre-Registered Client",
-            algAndKey.first to JwkSetSource.ByValue(Json.decodeFromString(algAndKey.second.toString())),
+            algAndKey.first to JWKSet(algAndKey.second.toPublicJWK()),
         )
         private val preRegisteredClientFooBar = PreregisteredClient(
             "foo:bar",
             "Pre-Registered Client with : in client_id",
-            algAndKey.first to JwkSetSource.ByValue(Json.decodeFromString(algAndKey.second.toString())),
+            algAndKey.first to JWKSet(algAndKey.second.toPublicJWK()),
         )
         private val cfg = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(

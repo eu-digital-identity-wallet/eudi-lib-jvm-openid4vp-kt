@@ -15,20 +15,15 @@
  */
 package eu.europa.ec.eudi.openid4vp.internal.response
 
-import eu.europa.ec.eudi.openid4vp.AuthorizationRequestError
-import eu.europa.ec.eudi.openid4vp.Consensus
-import eu.europa.ec.eudi.openid4vp.DispatcherOverDCApi
-import eu.europa.ec.eudi.openid4vp.EncryptionParameters
-import eu.europa.ec.eudi.openid4vp.Jwt
-import eu.europa.ec.eudi.openid4vp.ResolvedRequestObject
+import eu.europa.ec.eudi.openid4vp.*
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 
 /**
- * Default implementation of [DispatcherOverDCApi]
+ * Default implementation of [DCApiResponseBuilder]
  */
-internal class DefaultDispatcherOverDCApi : DispatcherOverDCApi {
+internal class DefaultDCApiResponseBuilder : DCApiResponseBuilder {
 
     override suspend fun assembleResponse(
         request: ResolvedRequestObject,

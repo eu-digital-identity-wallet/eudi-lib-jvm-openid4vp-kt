@@ -820,7 +820,7 @@ class DefaultDispatcherTest {
 
         @Test
         fun `if response mode is dc_api, positive consensus is assembled as vp_token JsonObject`() = runTest {
-            val dcApiDispatcher = DefaultDispatcherOverDCApi()
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
 
             val state = genState()
 
@@ -861,7 +861,7 @@ class DefaultDispatcherTest {
 
         @Test
         fun `if response mode is dc_api jwt, positive consensus is assembled as an encrypted response embedded in JsonObject`() = runTest {
-            val dcApiDispatcher = DefaultDispatcherOverDCApi()
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
 
             val state = genState()
 
@@ -922,7 +922,7 @@ class DefaultDispatcherTest {
 
         @Test
         fun `if response dc_api, negative consensus is assembled as JsonObject`() = runTest {
-            val dcApiDispatcher = DefaultDispatcherOverDCApi()
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
 
             val state = genState()
 
@@ -951,7 +951,7 @@ class DefaultDispatcherTest {
 
         @Test
         fun `dc api errors are assembled as json objects`() {
-            val dcApiDispatcher = DefaultDispatcherOverDCApi()
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
             val validationError = RequestValidationError.UnexpectedOrigin
             val errorResponse = dcApiDispatcher.assembleErrorResponse(validationError)
 

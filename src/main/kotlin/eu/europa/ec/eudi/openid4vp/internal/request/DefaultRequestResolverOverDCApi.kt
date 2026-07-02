@@ -20,7 +20,6 @@ import eu.europa.ec.eudi.openid4vp.internal.JwsJson
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.request.ReceivedRequest.*
-import io.ktor.client.*
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.decodeFromJsonElement
@@ -43,49 +42,29 @@ internal enum class DCApiExchangeProtocol {
     }
 }
 
-internal class DefaultRequestResolverOverDCApi(
-    private val openId4VPConfig: OpenId4VPConfig,
-    private val httpClient: HttpClient,
+internal class DefaultRequestResolverOverDCApi private constructor(
+    private val requestAuthenticator: RequestAuthenticator,
+    private val requestObjectValidator: RequestObjectValidator,
 ) : AuthorizationRequestOverDCApiResolver {
 
     override suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution =
-        with(httpClient) {
-            this.resolveRequestObject(protocol, origin, requestData)
-        }
-
-    private suspend fun HttpClient.resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution {
         try {
-            val receivedRequest = ReceivedRequest.make(requestData).getOrThrow()
+            val receivedRequest = makeReceivedRequest(requestData)
             val exchangeProtocol = DCApiExchangeProtocol.from(protocol)
 
             exchangeProtocol assertMatches receivedRequest
 
-            val authenticatedRequest = authenticateRequest(origin, receivedRequest)
-            val resolved = validateRequestObject(origin, authenticatedRequest, receivedRequest.isSigned)
+            val authenticatedRequest = requestAuthenticator.authenticateRequestOverDCApi(origin, receivedRequest)
+            val resolved = requestObjectValidator.validateDCApiRequestObject(origin, authenticatedRequest, receivedRequest.isSigned)
 
-            return Resolution.Success(resolved)
+            Resolution.Success(resolved)
         } catch (e: AuthorizationRequestException) {
-            return Resolution.Invalid(e.error, null)
+            Resolution.Invalid(e.error, null)
         }
-    }
 
-    private suspend fun HttpClient.authenticateRequest(origin: String, receivedRequest: ReceivedRequest): AuthenticatedRequest {
-        val requestAuthenticator = RequestAuthenticator(openId4VPConfig, this)
-        return requestAuthenticator.authenticateRequestOverDCApi(origin, receivedRequest)
-    }
-
-    private fun validateRequestObject(
-        origin: String,
-        authenticatedRequest: AuthenticatedRequest,
-        isSigned: Boolean,
-    ): ResolvedRequestObject {
-        val requestValidator = RequestObjectValidator(openId4VPConfig)
-        return requestValidator.validateDCApiRequestObject(origin, authenticatedRequest, isSigned)
-    }
-
-    private fun ReceivedRequest.Companion.make(requestData: JsonObject): Result<ReceivedRequest> = runCatchingCancellable {
+    private fun makeReceivedRequest(requestData: JsonObject): ReceivedRequest {
         val requestValue = requestData["request"]
-        when {
+        return when {
             requestValue != null && requestValue is JsonObject -> {
                 val jwsJson = jsonSupport.decodeFromJsonElement<JwsJson.General>(requestValue)
                 MultiSigned(jwsJson)
@@ -98,6 +77,15 @@ internal class DefaultRequestResolverOverDCApi(
 
             else -> Unsigned(jsonSupport.decodeFromJsonElement(requestData))
         }
+    }
+
+    companion object {
+        operator fun invoke(
+            openId4VPConfig: OpenId4VPConfig,
+        ): DefaultRequestResolverOverDCApi = DefaultRequestResolverOverDCApi(
+            requestAuthenticator = RequestAuthenticator(openId4VPConfig),
+            requestObjectValidator = RequestObjectValidator(openId4VPConfig),
+        )
     }
 }
 

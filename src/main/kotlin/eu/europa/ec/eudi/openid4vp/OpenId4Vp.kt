@@ -17,7 +17,7 @@ package eu.europa.ec.eudi.openid4vp
 
 import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
 import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
-import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherOverDCApi
+import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDCApiResponseBuilder
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherOverHttp
 import io.ktor.client.*
 
@@ -30,37 +30,37 @@ import io.ktor.client.*
  * @see AuthorizationRequestOverHttpResolver
  * @see AuthorizationRequestOverDCApiResolver
  * @see DispatcherOverHttp
- * @see DispatcherOverDCApi
+ * @see DCApiResponseBuilder
  */
 sealed interface OpenId4Vp {
 
-    interface OverHttp : AuthorizationRequestOverHttpResolver, DispatcherOverHttp, ErrorDispatcher, OpenId4Vp
-    interface OverDcAPI : AuthorizationRequestOverDCApiResolver, DispatcherOverDCApi, OpenId4Vp
+    interface OverRedirects : AuthorizationRequestOverHttpResolver, DispatcherOverHttp, ErrorDispatcher, OpenId4Vp
+    interface OverDcAPI : AuthorizationRequestOverDCApiResolver, DCApiResponseBuilder, OpenId4Vp
 
     companion object {
 
         fun overRedirects(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
-        ): OverHttp {
+        ): OverRedirects {
             val requestResolver = DefaultRequestResolverOverHttp(openId4VPConfig, httpClient)
             val dispatcher = DefaultDispatcherOverHttp(httpClient)
             return object :
                 AuthorizationRequestOverHttpResolver by requestResolver,
                 DispatcherOverHttp by dispatcher,
                 ErrorDispatcher by dispatcher,
-                OverHttp {}
+                OverRedirects {}
         }
 
         fun overDcApi(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
         ): OverDcAPI {
-            val requestResolver = DefaultRequestResolverOverDCApi(openId4VPConfig, httpClient)
-            val dispatcher = DefaultDispatcherOverDCApi()
+            val requestResolver = DefaultRequestResolverOverDCApi(openId4VPConfig)
+            val dispatcher = DefaultDCApiResponseBuilder()
             return object :
                 AuthorizationRequestOverDCApiResolver by requestResolver,
-                DispatcherOverDCApi by dispatcher,
+                DCApiResponseBuilder by dispatcher,
                 OverDcAPI {}
         }
     }

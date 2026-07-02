@@ -144,11 +144,7 @@ class UnvalidatedRequestResolverTest {
                 PreregisteredClient(
                     clientId = "Verifier",
                     legalName = "Verifier",
-                    jarConfig = JWSAlgorithm.RS256 to JwkSetSource.ByValue(
-                        Json.parseToJsonElement(
-                            JWKSet(signingKey).toPublicJWKSet().toString(),
-                        ).jsonObject,
-                    ),
+                    jarConfig = JWSAlgorithm.RS256 to JWKSet(signingKey).toPublicJWKSet(),
                 ),
             ),
             SupportedClientIdPrefix.RedirectUri,
@@ -744,7 +740,7 @@ class UnvalidatedRequestResolverTest {
             .replace("\n", "")
             .replace("  ", "")
 
-        private val resolver = DefaultRequestResolverOverDCApi(walletConfig, httpClient)
+        private val resolver = DefaultRequestResolverOverDCApi(walletConfig)
 
         private val clientMetadata =
             """ {
