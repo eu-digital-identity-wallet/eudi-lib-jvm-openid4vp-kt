@@ -33,6 +33,7 @@ import eu.europa.ec.eudi.openid4vp.dcql.*
 import eu.europa.ec.eudi.openid4vp.dcql.ClaimPathElement.Claim
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
+import eu.europa.ec.eudi.openid4vp.internal.request.ValidatedClientMetaData
 import eu.europa.ec.eudi.openid4vp.internal.request.asHttpsURL
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherTest.Verifier.assertIsJwtEncryptedWithVerifiersPublicKey
 import io.ktor.client.*
@@ -52,6 +53,7 @@ import java.net.URI
 import java.time.Clock
 import kotlin.test.*
 
+@DisplayName("When dispatching OpenId4VP responses")
 class DefaultDispatcherTest {
 
     //
@@ -60,7 +62,9 @@ class DefaultDispatcherTest {
 
     internal object Verifier {
 
-        val CLIENT = Client.Preregistered("https://client.example.org", "Verifier")
+        val CLIENT_ORIGINAL_ID = "https://client.example.org"
+
+        val CLIENT = Client.Preregistered(CLIENT_ORIGINAL_ID, "Verifier")
 
         val responseEncryptionKeyPair: ECKey = ECKeyGenerator(Curve.P_256)
             .keyUse(KeyUse.ENCRYPTION)
@@ -155,7 +159,7 @@ class DefaultDispatcherTest {
         )
 
         /**
-         * Creates a [Dispatcher] that mocks the behavior of a Verifier, in case of posting
+         * Creates a [DispatcherOverHttp] that mocks the behavior of a Verifier, in case of posting
          * an authorization response (direct post, or direct post jwt response_mode).
          *
          * The verifier asserts that it receives an HTTP Post, which contains [FormDataContent], having
@@ -168,7 +172,7 @@ class DefaultDispatcherTest {
         fun createDispatcherWithVerifierAsserting(
             responseBodyRedirectUri: URI? = null,
             responseParameterAssertions: (String) -> Unit,
-        ): Dispatcher {
+        ): DispatcherOverHttp {
             val mockEngine = MockEngine { request ->
                 assertEquals(HttpMethod.Post, request.method)
                 request.body.contentType?.let {
@@ -199,12 +203,12 @@ class DefaultDispatcherTest {
                 }
             }
 
-            return DefaultDispatcher(httpClient)
+            return DefaultDispatcherOverHttp(httpClient)
         }
     }
 
     @Nested
-    @DisplayName("Encrypted response")
+    @DisplayName("... as an ecrypted direct post (direct_post.jwt)")
     inner class DirectPostJwtResponse {
 
         @Test
@@ -388,7 +392,7 @@ class DefaultDispatcherTest {
                     respondOk()
                 }
                 val httpClient = HttpClient(mockEngine)
-                DefaultDispatcher(httpClient)
+                DefaultDispatcherOverHttp(httpClient)
             }
 
             val dispatchOutcome = errorDispatcher.dispatchError(
@@ -510,36 +514,10 @@ class DefaultDispatcherTest {
                     ),
                 ),
             )
-
-        private fun testCredentialQuery(): CredentialQuery = CredentialQuery(
-            QueryId("my_credential"),
-            Format.SdJwtVc,
-            meta = JsonObject(
-                mapOf(
-                    "vct_values" to
-                        JsonArray(
-                            listOf(
-                                JsonPrimitive("https://credentials.example.com/identity_credential"),
-                            ),
-                        ),
-                ),
-            ),
-            claims = listOf(
-                ClaimsQuery(
-                    path = ClaimPath(listOf(Claim("last_name"))),
-                ),
-                ClaimsQuery(
-                    path = ClaimPath(listOf(Claim("first_name"))),
-                ),
-                ClaimsQuery(
-                    path = ClaimPath(listOf(Claim("address"), Claim("street_address"))),
-                ),
-            ),
-        )
     }
 
     @Nested
-    @DisplayName("In query response")
+    @DisplayName("... as url query param")
     inner class QueryResponse {
 
         private val redirectUriBase = URI("https://foo.bar")
@@ -597,7 +575,7 @@ class DefaultDispatcherTest {
                     )
 
                     val outcome = HttpClient().use { httpClient ->
-                        val dispatcher = DefaultDispatcher(httpClient)
+                        val dispatcher = DefaultDispatcherOverHttp(httpClient)
                         dispatcher.dispatch(
                             verifierRequest,
                             Consensus.NegativeConsensus,
@@ -671,7 +649,7 @@ class DefaultDispatcherTest {
     }
 
     @Nested
-    @DisplayName("In fragment response")
+    @DisplayName("... as url fragment")
     inner class FragmentResponse {
 
         private val redirectUriBase = URI("https://foo.bar")
@@ -730,7 +708,7 @@ class DefaultDispatcherTest {
                     )
 
                     val outcome = HttpClient().use { httpClient ->
-                        val dispatcher = DefaultDispatcher(httpClient)
+                        val dispatcher = DefaultDispatcherOverHttp(httpClient)
                         dispatcher.dispatch(
                             verifierRequest,
                             Consensus.NegativeConsensus,
@@ -811,6 +789,178 @@ class DefaultDispatcherTest {
             map.also(assertions)
         }
     }
+
+    @Nested
+    @DisplayName("... via DC API")
+    inner class DcApiResponse {
+
+        private fun createResolvedRequestObject(
+            validatedClientMetaData: ValidatedClientMetaData?,
+            query: DCQL,
+            state: String,
+            responseMode: ResponseMode,
+        ): ResolvedRequestObject {
+            return ResolvedRequestObject(
+                client = Client.Origin(Verifier.CLIENT_ORIGINAL_ID),
+                query = query,
+                vpFormatsSupported = VpFormatsSupported(
+                    msoMdoc = VpFormatsSupported.MsoMdoc(
+                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    ),
+                ),
+                nonce = "0S6_WzA2Mj",
+                responseMode = responseMode,
+                state = state,
+                responseEncryptionSpecification = validatedClientMetaData?.responseEncryptionSpecification,
+                transactionData = null,
+                verifierInfo = null,
+            )
+        }
+
+        @Test
+        fun `if response mode is dc_api, positive consensus is assembled as vp_token JsonObject`() = runTest {
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
+
+            val state = genState()
+
+            val query = DCQL(
+                credentials = Credentials(testCredentialQuery()),
+            )
+
+            val resolvedRequestObject = createResolvedRequestObject(
+                validatedClientMetaData = null,
+                query = query,
+                state = state,
+                responseMode = ResponseMode.DCApi,
+            )
+
+            val consensus = Consensus.PositiveConsensus(
+                VerifiablePresentations(
+                    mapOf(
+                        QueryId("my_credential") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
+                    ),
+                ),
+            )
+
+            val dcApiResponse = dcApiDispatcher.assembleResponse(resolvedRequestObject, consensus)
+
+            val vpToken = dcApiResponse.get("vp_token")
+            assertNotNull(vpToken)
+            assertIs<JsonObject>(vpToken)
+
+            val queryIdResponse = vpToken.get("my_credential")
+            assertNotNull(queryIdResponse)
+            assertIs<JsonArray>(queryIdResponse)
+
+            val stateInResponse = dcApiResponse.get("state")
+            assertNotNull(stateInResponse)
+            assertIs<JsonPrimitive>(stateInResponse)
+            assertEquals(state, stateInResponse.content)
+        }
+
+        @Test
+        fun `if response mode is dc_api jwt, positive consensus is assembled as an encrypted response embedded in JsonObject`() = runTest {
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
+
+            val state = genState()
+
+            val query = DCQL(
+                credentials = Credentials(testCredentialQuery()),
+            )
+
+            val clientMetadataValidated =
+                ClientMetaDataValidator.validateClientMetaData(
+                    Verifier.metaDataRequestingEncryptedResponse,
+                    ResponseMode.DCApiJwt,
+                    query,
+                    Wallet.config.responseEncryptionConfiguration,
+                    Wallet.config.vpConfiguration.vpFormatsSupported,
+                )
+
+            val resolvedRequestObject = createResolvedRequestObject(
+                validatedClientMetaData = clientMetadataValidated,
+                query = query,
+                state = state,
+                responseMode = ResponseMode.DCApiJwt,
+            )
+
+            val consensus = Consensus.PositiveConsensus(
+                VerifiablePresentations(
+                    mapOf(
+                        QueryId("my_credential") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
+                    ),
+                ),
+            )
+
+            val apu = "dummy_apu"
+            val dcApiResponse = dcApiDispatcher.assembleResponse(
+                resolvedRequestObject,
+                consensus,
+                EncryptionParameters.DiffieHellman(Base64URL.encode(apu)),
+            )
+
+            val response = dcApiResponse.get("response")
+            assertNotNull(response)
+            assertIs<JsonPrimitive>(response)
+
+            val encryptedResponse = response.content.assertIsJwtEncryptedWithVerifiersPublicKey()
+            assertEquals(Base64URL.encode(resolvedRequestObject.nonce), encryptedResponse.header.agreementPartyVInfo)
+            assertEquals(Base64URL.encode(apu), encryptedResponse.header.agreementPartyUInfo)
+
+            val vpTokenJO = encryptedResponse.jwtClaimsSet.getJSONObjectClaim("vp_token")
+            assertNotNull(vpTokenJO)
+
+            val queryIdResponse = vpTokenJO.get("my_credential")
+            assertNotNull(queryIdResponse)
+            assertIs<List<String>>(queryIdResponse)
+
+            val stateInResponse = encryptedResponse.jwtClaimsSet.getStringClaim("state")
+            assertNotNull(stateInResponse)
+            assertEquals(state, stateInResponse)
+        }
+
+        @Test
+        fun `if response dc_api, negative consensus is assembled as JsonObject`() = runTest {
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
+
+            val state = genState()
+
+            val query = DCQL(
+                credentials = Credentials(testCredentialQuery()),
+            )
+
+            val resolvedRequestObject = createResolvedRequestObject(
+                validatedClientMetaData = null,
+                query = query,
+                state = state,
+                responseMode = ResponseMode.DCApi,
+            )
+
+            val dcApiResponse = dcApiDispatcher.assembleResponse(resolvedRequestObject, Consensus.NegativeConsensus)
+            val error = dcApiResponse.get("error")
+            assertNotNull(error)
+            assertIs<JsonPrimitive>(error)
+            assertEquals("access_denied", error.content)
+
+            val stateInResponse = dcApiResponse.get("state")
+            assertNotNull(stateInResponse)
+            assertIs<JsonPrimitive>(stateInResponse)
+            assertEquals(state, stateInResponse.content)
+        }
+
+        @Test
+        fun `dc api errors are assembled as json objects`() {
+            val dcApiDispatcher = DefaultDCApiResponseBuilder()
+            val validationError = RequestValidationError.UnexpectedOrigin
+            val errorResponse = dcApiDispatcher.assembleErrorResponse(validationError)
+
+            val error = errorResponse.get("error")
+            assertNotNull(error)
+            assertIs<JsonPrimitive>(error)
+            assertEquals("invalid_request", error.content)
+        }
+    }
 }
 
 private fun genState(): String = State().value
@@ -819,3 +969,29 @@ private fun JWTClaimsSet.vpTokenClaim(): JsonElement? =
 
 private fun URI.getQueryParameter(name: String): String? =
     rawQuery.parseUrlEncodedParameters().toMap().mapValues { it.value.first() }[name]
+
+private fun testCredentialQuery(): CredentialQuery = CredentialQuery(
+    QueryId("my_credential"),
+    Format.SdJwtVc,
+    meta = JsonObject(
+        mapOf(
+            "vct_values" to
+                JsonArray(
+                    listOf(
+                        JsonPrimitive("https://credentials.example.com/identity_credential"),
+                    ),
+                ),
+        ),
+    ),
+    claims = listOf(
+        ClaimsQuery(
+            path = ClaimPath(listOf(Claim("last_name"))),
+        ),
+        ClaimsQuery(
+            path = ClaimPath(listOf(Claim("first_name"))),
+        ),
+        ClaimsQuery(
+            path = ClaimPath(listOf(Claim("address"), Claim("street_address"))),
+        ),
+    ),
+)

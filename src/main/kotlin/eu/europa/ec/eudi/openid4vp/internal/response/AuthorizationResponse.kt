@@ -16,6 +16,11 @@
 package eu.europa.ec.eudi.openid4vp.internal.response
 
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.DCApi
+import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.DCApiJwt
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
 import java.net.URI
 import java.net.URL
 
@@ -71,6 +76,69 @@ internal sealed interface AuthorizationResponsePayload : java.io.Serializable {
         override val encryptionParameters: EncryptionParameters? = null,
     ) : Failed
 }
+
+private const val VP_TOKEN_FORM_PARAM = "vp_token"
+
+/**
+ * Converts the [AuthorizationResponsePayload] into a map structure suitable for dispatching.
+ *
+ * The output map contains key-value pairs representing the payload's details.
+ * Different types of [AuthorizationResponsePayload] are handled specifically:
+ * - [eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponsePayload.Success] adds Verifiable Presentation details and optionally `state`.
+ * - [eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponsePayload.InvalidRequest] adds error-related details and optionally `state`.
+ * - [eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponsePayload.NoConsensusResponseData] adds an access-denied error code and optionally `state`.
+ *
+ * @return A map containing the serialized details of the authorization response payload.
+ */
+internal fun AuthorizationResponsePayload.asDispatchingMap(): Map<String, String> =
+    when (this) {
+        is AuthorizationResponsePayload.Success -> buildMap {
+            put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asParam())
+            state?.let {
+                put(OpenId4VPSpec.STATE, it)
+            }
+        }
+
+        is AuthorizationResponsePayload.InvalidRequest -> buildMap {
+            put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.fromError(error).code)
+            put(OpenId4VPSpec.ERROR_DESCRIPTION, "$error")
+            state?.let {
+                put(OpenId4VPSpec.STATE, it)
+            }
+        }
+
+        is AuthorizationResponsePayload.NoConsensusResponseData -> buildMap {
+            put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.ACCESS_DENIED.code)
+            state?.let {
+                put(OpenId4VPSpec.STATE, it)
+            }
+        }
+    }
+
+internal fun AuthorizationResponsePayload.asJsonObject(): JsonObject =
+    when (this) {
+        is AuthorizationResponsePayload.Success -> buildJsonObject {
+            put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asJsonObject())
+            state?.let {
+                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+            }
+        }
+
+        is AuthorizationResponsePayload.InvalidRequest -> buildJsonObject {
+            put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.fromError(error).code))
+            put(OpenId4VPSpec.ERROR_DESCRIPTION, JsonPrimitive("$error"))
+            state?.let {
+                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+            }
+        }
+
+        is AuthorizationResponsePayload.NoConsensusResponseData -> buildJsonObject {
+            put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.ACCESS_DENIED.code))
+            state?.let {
+                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+            }
+        }
+    }
 
 /**
  * An OAUTH2 authorization response
@@ -166,6 +234,21 @@ internal sealed interface AuthorizationResponse : java.io.Serializable {
             }
         }
     }
+
+    data class DCApi(
+        val data: AuthorizationResponsePayload,
+    ) : AuthorizationResponse
+
+    data class DCApiJwt(
+        val data: AuthorizationResponsePayload,
+        val responseEncryptionSpecification: ResponseEncryptionSpecification?,
+    ) : AuthorizationResponse {
+        init {
+            if (data !is AuthorizationResponsePayload.InvalidRequest) {
+                requireNotNull(responseEncryptionSpecification)
+            }
+        }
+    }
 }
 
 internal fun ResolvedRequestObject.responseWith(
@@ -209,12 +292,24 @@ private fun ResolvedRequestObject.responseWith(
             data,
             checkNotNull(responseEncryptionSpecification),
         )
+
         is ResponseMode.Fragment -> AuthorizationResponse.Fragment(mode.redirectUri, data)
         is ResponseMode.FragmentJwt -> AuthorizationResponse.FragmentJwt(
             mode.redirectUri,
             data,
             checkNotNull(responseEncryptionSpecification),
         )
+
         is ResponseMode.Query -> AuthorizationResponse.Query(mode.redirectUri, data)
-        is ResponseMode.QueryJwt -> AuthorizationResponse.QueryJwt(mode.redirectUri, data, checkNotNull(responseEncryptionSpecification))
+        is ResponseMode.QueryJwt -> AuthorizationResponse.QueryJwt(
+            mode.redirectUri,
+            data,
+            checkNotNull(responseEncryptionSpecification),
+        )
+
+        ResponseMode.DCApi -> DCApi(data)
+        ResponseMode.DCApiJwt -> DCApiJwt(
+            data,
+            checkNotNull(responseEncryptionSpecification),
+        )
     }

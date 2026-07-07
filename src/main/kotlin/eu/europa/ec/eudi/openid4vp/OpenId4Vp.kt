@@ -15,46 +15,53 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import eu.europa.ec.eudi.openid4vp.OpenId4Vp.Companion.invoke
-import eu.europa.ec.eudi.openid4vp.internal.request.DefaultAuthorizationRequestResolver
-import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcher
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
+import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDCApiResponseBuilder
+import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherOverHttp
 import io.ktor.client.*
 
 /**
- * An interface providing support for handling an OAuth2.0 request that represents OpenId4VP authorization.
+ * An interface providing support for handling an OAuth2.0 request that represents OpenId4VP authorization coming via the HTTP channel or
+ * the Digital Credentials API.
  *
- * To obtain an instance of [OpenId4Vp], method [invoke] can be used.
+ * To obtain an instance of [OpenId4Vp], either method [OpenId4Vp.overHttp()] or [OpenId4Vp.overDcApi()] can be used.
  *
- * @see AuthorizationRequestResolver
- * @see Dispatcher
+ * @see AuthorizationRequestOverHttpResolver
+ * @see AuthorizationRequestOverDCApiResolver
+ * @see DispatcherOverHttp
+ * @see DCApiResponseBuilder
  */
-interface OpenId4Vp : AuthorizationRequestResolver, Dispatcher, ErrorDispatcher {
+sealed interface OpenId4Vp {
+
+    interface OverRedirects : AuthorizationRequestOverHttpResolver, DispatcherOverHttp, ErrorDispatcher, OpenId4Vp
+    interface OverDcAPI : AuthorizationRequestOverDCApiResolver, DCApiResponseBuilder, OpenId4Vp
 
     companion object {
 
-        /**
-         * Factory method to create a [OpenId4Vp].
-         *
-         * @param openId4VPConfig wallet's configuration
-         * @param httpClient A Ktor http client. This can be used to configure ktor
-         * to use a specific engine.
-         *
-         * @return a [OpenId4Vp]
-         */
-        operator fun invoke(
+        fun overRedirects(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
-        ): OpenId4Vp {
-            val requestResolver = DefaultAuthorizationRequestResolver(openId4VPConfig, httpClient)
-            val dispatcher = DefaultDispatcher(httpClient)
+        ): OverRedirects {
+            val requestResolver = DefaultRequestResolverOverHttp(openId4VPConfig, httpClient)
+            val dispatcher = DefaultDispatcherOverHttp(httpClient)
             return object :
-                AuthorizationRequestResolver by requestResolver,
-                Dispatcher by dispatcher,
+                AuthorizationRequestOverHttpResolver by requestResolver,
+                DispatcherOverHttp by dispatcher,
                 ErrorDispatcher by dispatcher,
-                OpenId4Vp {}
+                OverRedirects {}
+        }
+
+        fun overDcApi(
+            openId4VPConfig: OpenId4VPConfig,
+            httpClient: HttpClient,
+        ): OverDcAPI {
+            val requestResolver = DefaultRequestResolverOverDCApi(openId4VPConfig)
+            val dispatcher = DefaultDCApiResponseBuilder()
+            return object :
+                AuthorizationRequestOverDCApiResolver by requestResolver,
+                DCApiResponseBuilder by dispatcher,
+                OverDcAPI {}
         }
     }
 }
-
-@Deprecated("Use OpenId4Vp instead", ReplaceWith("OpenId4Vp"))
-typealias SiopOpenId4Vp = OpenId4Vp

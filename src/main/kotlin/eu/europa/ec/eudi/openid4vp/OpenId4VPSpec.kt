@@ -32,6 +32,7 @@ object OpenId4VPSpec {
     const val CLIENT_ID_PREFIX_VERIFIER_ATTESTATION = "verifier_attestation"
     const val CLIENT_ID_PREFIX_X509_SAN_DNS = "x509_san_dns"
     const val CLIENT_ID_PREFIX_X509_HASH = "x509_hash"
+    const val CLIENT_ID_PREFIX_ORIGIN = "origin"
 
     const val AUTHORIZATION_REQUEST_OBJECT_TYPE = "oauth-authz-req+jwt"
 
@@ -39,6 +40,10 @@ object OpenId4VPSpec {
     const val RM_DIRECT_POST_JWT: String = "direct_post.jwt"
 
     const val RESPONSE_TYPE_VP_TOKEN: String = "vp_token"
+
+    const val STATE = "state"
+    const val ERROR = "error"
+    const val ERROR_DESCRIPTION = "error_description"
 
     const val WALLET_NONCE: String = "wallet_nonce"
     const val WALLET_METADATA: String = "wallet_metadata"
@@ -93,4 +98,10 @@ object OpenId4VPSpec {
     const val VERIFIER_INFO_FORMAT_JWT: String = "jwt"
     const val VERIFIER_INFO_DATA: String = "data"
     const val VERIFIER_INFO_CREDENTIAL_IDS = "credential_ids"
+
+    const val EXPECTED_ORIGINS = "expected_origins"
+
+    const val DC_API_EXCHANGE_PROTOCOL_UNSIGNED = "openid4vp-v1-unsigned"
+    const val DC_API_EXCHANGE_PROTOCOL_SIGNED = "openid4vp-v1-signed"
+    const val DC_API_EXCHANGE_PROTOCOL_MULTISIGNED = "openid4vp-v1-multisigned"
 }

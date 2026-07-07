@@ -25,7 +25,8 @@ import com.nimbusds.jose.util.Base64URL
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.openid.connect.sdk.Nonce
-import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.*
+import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.X509Hash
+import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.X509SanDns
 import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import id.walt.mdoc.COSECryptoProviderKeyInfo
@@ -74,7 +75,6 @@ suspend fun HttpClient.program() {
     val verifierApi = URL("https://dev.verifier-backend.eudiw.dev")
     val wallet = Wallet(
         walletConfig = walletConfig(
-            Preregistered(Verifier.asPreregisteredClient(verifierApi)),
             X509SanDns(TrustAnyX509),
             X509Hash(TrustAnyX509),
         ),
@@ -132,14 +132,6 @@ class Verifier private constructor(
     }
 
     companion object {
-
-        fun asPreregisteredClient(verifierApi: URL): PreregisteredClient {
-            return PreregisteredClient(
-                "Verifier",
-                "Verifier",
-                JWSAlgorithm.RS256 to JwkSetSource.ByReference(URI("$verifierApi/wallet/public-keys.json")),
-            )
-        }
 
         /**
          * Creates a new verifier that knows (out of bound) the
@@ -258,8 +250,8 @@ private class Wallet(
     private val walletConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) {
-    private val openId4Vp: OpenId4Vp by lazy {
-        OpenId4Vp(walletConfig, httpClient)
+    private val openId4Vp: OpenId4Vp.OverRedirects by lazy {
+        OpenId4Vp.overRedirects(walletConfig, httpClient)
     }
 
     suspend fun handle(uri: URI): DispatchOutcome {
@@ -271,7 +263,7 @@ private class Wallet(
         }
     }
 
-    suspend fun OpenId4Vp.handle(
+    suspend fun OpenId4Vp.OverRedirects.handle(
         uri: String,
         holderConsensus: suspend (ResolvedRequestObject) -> Consensus,
     ): DispatchOutcome =
@@ -368,6 +360,7 @@ private class Wallet(
             is ResponseMode.FragmentJwt -> responseMode.redirectUri.toString()
             is ResponseMode.Query -> responseMode.redirectUri.toString()
             is ResponseMode.QueryJwt -> responseMode.redirectUri.toString()
+            ResponseMode.DCApi, ResponseMode.DCApiJwt -> error("No uri for response mode $this")
         }
 
         val openID4VPHandoverInfo = listOf(
@@ -456,7 +449,7 @@ private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix
                 ),
             ),
         ),
-        jarConfiguration = JarConfiguration(
+        signedRequestConfiguration = SignedRequestConfiguration(
             supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
             supportedRequestUriMethods = SupportedRequestUriMethods.Both(
                 SupportedRequestUriMethods.Post(

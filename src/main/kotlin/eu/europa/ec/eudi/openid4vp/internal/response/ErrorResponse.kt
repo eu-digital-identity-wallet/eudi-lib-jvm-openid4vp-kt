@@ -19,6 +19,7 @@ import eu.europa.ec.eudi.openid4vp.AuthorizationRequestError
 import eu.europa.ec.eudi.openid4vp.EncryptionParameters
 import eu.europa.ec.eudi.openid4vp.ErrorDispatchDetails
 import eu.europa.ec.eudi.openid4vp.ResponseMode
+import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.*
 
 internal fun AuthorizationRequestError.responseWith(
     di: ErrorDispatchDetails,
@@ -59,4 +60,8 @@ private fun responseWith(
             data,
             di.responseEncryptionSpecification,
         )
+
+        ResponseMode.DCApi,
+        ResponseMode.DCApiJwt,
+        -> error("DC API response mode not supported for error dispatching via redirects")
     }
