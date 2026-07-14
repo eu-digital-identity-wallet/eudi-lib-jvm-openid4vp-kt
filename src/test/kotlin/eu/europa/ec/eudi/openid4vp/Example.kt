@@ -434,19 +434,17 @@ private val TrustAnyX509: (List<X509Certificate>) -> Boolean = { _ ->
 
 private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix) =
     OpenId4VPConfig(
-        vpConfiguration = VPConfiguration(
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc.HAIP,
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
+        vpFormatsSupported = VpFormatsSupported(
+            VpFormatsSupported.SdJwtVc.HAIP,
+            VpFormatsSupported.MsoMdoc(
+                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
             ),
-            supportedTransactionDataTypes = listOf(
-                SupportedTransactionDataType.SdJwtVc(
-                    TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
-                    setOf(HashAlgorithm.SHA_256),
-                ),
+        ),
+        supportedTransactionDataTypes = listOf(
+            SupportedTransactionDataType.SdJwtVc(
+                TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
+                setOf(HashAlgorithm.SHA_256),
             ),
         ),
         signedRequestConfiguration = SignedRequestConfiguration(

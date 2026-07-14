@@ -173,27 +173,6 @@ sealed interface SupportedTransactionDataType {
 }
 
 /**
- * Configuration options for OpenId4VP
- *
- * @param knownDCQLQueriesPerScope a set of DCQL queries that a verifier may request via a pre-agreed scope
- * @param vpFormatsSupported The formats the wallet supports
- * @param supportedTransactionDataTypes the types of Transaction Data that are supported by the wallet
- */
-data class VPConfiguration(
-    val knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
-    val vpFormatsSupported: VpFormatsSupported,
-    val supportedTransactionDataTypes: List<SupportedTransactionDataType> = emptyList(),
-) {
-    init {
-        if (null == vpFormatsSupported.sdJwtVc) {
-            require(supportedTransactionDataTypes.none { it is SupportedTransactionDataType.SdJwtVc }) {
-                "SD-JWT VC Transaction Data cannot be used when SD-JWT VC is not supported"
-            }
-        }
-    }
-}
-
-/**
  * Configurations options for encrypting an authorization response if requested by the verifier.
  *
  * OpenId4VP recommends supporting [encrypting][Supported] the authorization response
@@ -411,7 +390,9 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * If not provided, it will default to [SignedRequestConfiguration.Default]
  * @param responseEncryptionConfiguration whether wallet supports authorization response encryption. If not specified, it takes the default value
  * [ResponseEncryptionConfiguration.NotSupported].
- * @param vpConfiguration options about OpenId4VP.
+ * @param knownDCQLQueriesPerScope a set of DCQL queries that a verifier may request via a pre-agreed scope
+ * @param vpFormatsSupported The formats the wallet supports
+ * @param supportedTransactionDataTypes the types of Transaction Data that are supported by the wallet
  * @param clock the system Clock. If not provided system's default clock will be used.
  * @param supportedClientIdPrefixes the client id prefixes that are supported/trusted by the wallet
  * @param errorDispatchPolicy wallet's policy regarding error dispatching. Defaults to [ErrorDispatchPolicy.OnlyAuthenticatedClients].
@@ -420,11 +401,14 @@ data class OpenId4VPConfig(
     val issuer: Issuer? = SelfIssued,
     val signedRequestConfiguration: SignedRequestConfiguration = SignedRequestConfiguration.Default,
     val responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
-    val vpConfiguration: VPConfiguration,
+    val knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
+    val vpFormatsSupported: VpFormatsSupported,
+    val supportedTransactionDataTypes: List<SupportedTransactionDataType> = emptyList(),
     val clock: Clock = Clock.systemDefaultZone(),
     val supportedClientIdPrefixes: List<SupportedClientIdPrefix>,
     val errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
 ) {
+
     init {
         require(supportedClientIdPrefixes.isNotEmpty()) { "At least a supported client id prefix must be provided" }
 
@@ -435,24 +419,34 @@ data class OpenId4VPConfig(
                 "Wrong configuration. Multi-singed requests policy must declare a supported client id prefix."
             }
         }
+
+        if (null == vpFormatsSupported.sdJwtVc) {
+            require(supportedTransactionDataTypes.none { it is SupportedTransactionDataType.SdJwtVc }) {
+                "SD-JWT VC Transaction Data cannot be used when SD-JWT VC is not supported"
+            }
+        }
     }
 
     constructor(
         issuer: Issuer? = SelfIssued,
         signedRequestConfiguration: SignedRequestConfiguration = SignedRequestConfiguration.Default,
         responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
-        vpConfiguration: VPConfiguration,
+        knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
+        vpFormatsSupported: VpFormatsSupported,
+        supportedTransactionDataTypes: List<SupportedTransactionDataType> = emptyList(),
         clock: Clock = Clock.systemDefaultZone(),
         errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
         vararg supportedClientIdPrefixes: SupportedClientIdPrefix,
     ) : this(
-        issuer,
-        signedRequestConfiguration,
-        responseEncryptionConfiguration,
-        vpConfiguration,
-        clock,
-        supportedClientIdPrefixes.toList(),
-        errorDispatchPolicy,
+        issuer = issuer,
+        signedRequestConfiguration = signedRequestConfiguration,
+        responseEncryptionConfiguration = responseEncryptionConfiguration,
+        knownDCQLQueriesPerScope = knownDCQLQueriesPerScope,
+        vpFormatsSupported = vpFormatsSupported,
+        supportedTransactionDataTypes = supportedTransactionDataTypes,
+        clock = clock,
+        supportedClientIdPrefixes = supportedClientIdPrefixes.toList(),
+        errorDispatchPolicy = errorDispatchPolicy,
     )
 
     companion object {

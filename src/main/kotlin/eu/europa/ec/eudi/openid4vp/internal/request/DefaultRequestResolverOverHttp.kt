@@ -278,7 +278,7 @@ private fun UnvalidatedRequestObject.responseEncryptionSpecification(
                 responseMode,
                 null,
                 openId4VPConfig.responseEncryptionConfiguration,
-                openId4VPConfig.vpConfiguration.vpFormatsSupported,
+                openId4VPConfig.vpFormatsSupported,
             )
         }
         validatedClientMetadata.responseEncryptionSpecification

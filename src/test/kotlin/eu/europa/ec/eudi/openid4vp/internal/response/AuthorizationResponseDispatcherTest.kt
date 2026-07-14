@@ -61,13 +61,11 @@ class AuthorizationResponseDispatcherTest {
 
     private val walletConfig = OpenId4VPConfig(
         supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-        vpConfiguration = VPConfiguration(
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc.HAIP,
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
+        vpFormatsSupported = VpFormatsSupported(
+            VpFormatsSupported.SdJwtVc.HAIP,
+            VpFormatsSupported.MsoMdoc(
+                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
             ),
         ),
         clock = Clock.systemDefaultZone(),
@@ -117,7 +115,7 @@ class AuthorizationResponseDispatcherTest {
                     responseMode,
                     query,
                     walletConfig.responseEncryptionConfiguration,
-                    walletConfig.vpConfiguration.vpFormatsSupported,
+                    walletConfig.vpFormatsSupported,
                 )
             }
 

@@ -77,13 +77,11 @@ class ConfigTests {
 
         assertFailsWith<IllegalArgumentException> {
             OpenId4VPConfig(
-                vpConfiguration = VPConfiguration(
-                    vpFormatsSupported = VpFormatsSupported(
-                        VpFormatsSupported.SdJwtVc.HAIP,
-                        VpFormatsSupported.MsoMdoc(
-                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        ),
+                vpFormatsSupported = VpFormatsSupported(
+                    VpFormatsSupported.SdJwtVc.HAIP,
+                    VpFormatsSupported.MsoMdoc(
+                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                     ),
                 ),
                 supportedClientIdPrefixes = listOf(x509SanDnsSupportedScheme, preRegSupportedPrefix),

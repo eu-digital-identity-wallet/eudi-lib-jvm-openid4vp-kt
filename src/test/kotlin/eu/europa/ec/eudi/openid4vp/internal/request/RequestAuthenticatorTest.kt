@@ -44,13 +44,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -82,13 +80,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -148,13 +144,11 @@ class ClientAuthenticatorOverHTTPTest {
                 SupportedClientIdPrefix.RedirectUri,
                 SupportedClientIdPrefix.Preregistered(preRegisteredClient, preRegisteredClientFooBar),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -200,13 +194,11 @@ class ClientAuthenticatorOverHTTPTest {
                     algAndKey.second.toPublicKey()
                 },
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -311,13 +303,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.VerifierAttestation(AttestationIssuer.verifier),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -415,13 +405,11 @@ class RequestAuthenticatorOverDCApiTest {
     private val didSupportedScheme = SupportedClientIdPrefix.DecentralizedIdentifier({ _ -> didAlgAndKey.second.toPublicKey() })
 
     private val cfg = OpenId4VPConfig(
-        vpConfiguration = VPConfiguration(
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc.HAIP,
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
+        vpFormatsSupported = VpFormatsSupported(
+            VpFormatsSupported.SdJwtVc.HAIP,
+            VpFormatsSupported.MsoMdoc(
+                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
             ),
         ),
         supportedClientIdPrefixes = listOf(x509SanDnsSupportedPrefix, didSupportedScheme),

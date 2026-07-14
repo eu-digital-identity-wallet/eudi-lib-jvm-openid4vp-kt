@@ -49,13 +49,11 @@ class AuthorizationResponseBuilderTest {
                 supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
                 supportedMethods = listOf(EncryptionMethod.A256GCM),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -119,7 +117,7 @@ class AuthorizationResponseBuilderTest {
                     responseMode,
                     query,
                     Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpConfiguration.vpFormatsSupported,
+                    Wallet.config.vpFormatsSupported,
                 )
             }
             val resolvedRequest =

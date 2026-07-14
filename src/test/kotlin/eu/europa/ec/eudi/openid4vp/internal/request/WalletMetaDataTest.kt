@@ -32,13 +32,11 @@ class WalletMetaDataTest {
     fun `test with jar encryption`() = runTest {
         val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             signedRequestConfiguration = SignedRequestConfiguration(
@@ -59,13 +57,11 @@ class WalletMetaDataTest {
     fun `test without jar encryption`() = runTest {
         val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             signedRequestConfiguration = SignedRequestConfiguration(
@@ -80,10 +76,8 @@ class WalletMetaDataTest {
     fun `when clientId permits signed Request Objects, request_object_signing_alg_values_supported MUST be included`() = runTest {
         val config = OpenId4VPConfig(
             supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
             ),
         )
         val walletMetaData = walletMetaData(config, "x509_san_dns:verifier.example.com", emptyList())
@@ -95,10 +89,8 @@ class WalletMetaDataTest {
         runTest {
             val config = OpenId4VPConfig(
                 supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.RedirectUri, SupportedClientIdPrefix.X509SanDns.NoValidation),
-                vpConfiguration = VPConfiguration(
-                    vpFormatsSupported = VpFormatsSupported(
-                        VpFormatsSupported.SdJwtVc.HAIP,
-                    ),
+                vpFormatsSupported = VpFormatsSupported(
+                    VpFormatsSupported.SdJwtVc.HAIP,
                 ),
             )
             val walletMetaData = walletMetaData(config, "redirect_uri:https://verifier.example.com/callback", emptyList())
@@ -121,7 +113,7 @@ private suspend fun assertMetadata(config: OpenId4VPConfig, clientId: String) {
             println(jsonSupport.encodeToString(it))
         }
 
-    assertExpectedVpFormats(config.vpConfiguration.vpFormatsSupported, walletMetaData)
+    assertExpectedVpFormats(config.vpFormatsSupported, walletMetaData)
     assertClientIdPrefix(config.supportedClientIdPrefixes, walletMetaData)
     assertPresentationDefinitionUriSupported(walletMetaData)
     assertJarSigning(config, clientId, walletMetaData)

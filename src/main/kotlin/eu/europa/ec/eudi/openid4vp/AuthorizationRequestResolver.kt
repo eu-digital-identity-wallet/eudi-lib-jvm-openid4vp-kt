@@ -257,7 +257,7 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
  * @property responseEncryptionSpecification The verifier's requirements, if any, for encrypting the authorization response
  * @property vpFormatsSupported Populated when client metadata are provided along with the request. It contains the formats
  *   that both wallet and requester support. It is calculated by comparing wallet's configuration
- *   (@see [OpenId4VPConfig].vpConfiguration)and the formats passed in request's client metadata.
+ *   (@see [OpenId4VPConfig].vpFormatsSupported)and the formats passed in request's client metadata.
  */
 data class ResolvedRequestObject(
     val client: Client,

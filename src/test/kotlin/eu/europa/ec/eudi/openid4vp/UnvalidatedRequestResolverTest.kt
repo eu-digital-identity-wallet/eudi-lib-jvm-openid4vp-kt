@@ -156,30 +156,28 @@ class UnvalidatedRequestResolverTest {
             supportedAlgorithms = listOf(JWSAlgorithm.RS256),
             multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
         ),
-        vpConfiguration = VPConfiguration(
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc(
-                    sdJwtAlgorithms = listOf(
-                        JWSAlgorithm.ES512,
-                        JWSAlgorithm.ES256,
-                        JWSAlgorithm.RS256,
-                    ),
-                    kbJwtAlgorithms = listOf(
-                        JWSAlgorithm.ES512,
-                        JWSAlgorithm.ES256,
-                        JWSAlgorithm.RS256,
-                    ),
+        vpFormatsSupported = VpFormatsSupported(
+            VpFormatsSupported.SdJwtVc(
+                sdJwtAlgorithms = listOf(
+                    JWSAlgorithm.ES512,
+                    JWSAlgorithm.ES256,
+                    JWSAlgorithm.RS256,
                 ),
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                kbJwtAlgorithms = listOf(
+                    JWSAlgorithm.ES512,
+                    JWSAlgorithm.ES256,
+                    JWSAlgorithm.RS256,
                 ),
             ),
-            supportedTransactionDataTypes = listOf(
-                SupportedTransactionDataType.SdJwtVc(
-                    TransactionDataType("basic-transaction-data"),
-                    setOf(HashAlgorithm.SHA_256, HashAlgorithm("sha-384")),
-                ),
+            VpFormatsSupported.MsoMdoc(
+                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+            ),
+        ),
+        supportedTransactionDataTypes = listOf(
+            SupportedTransactionDataType.SdJwtVc(
+                TransactionDataType("basic-transaction-data"),
+                setOf(HashAlgorithm.SHA_256, HashAlgorithm("sha-384")),
             ),
         ),
         clock = Clock.systemDefaultZone(),

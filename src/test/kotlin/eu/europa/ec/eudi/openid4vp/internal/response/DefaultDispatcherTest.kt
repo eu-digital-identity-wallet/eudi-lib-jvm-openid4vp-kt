@@ -113,7 +113,7 @@ class DefaultDispatcherTest {
                     responseMode,
                     query,
                     Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpConfiguration.vpFormatsSupported,
+                    Wallet.config.vpFormatsSupported,
                 )
 
             return ResolvedRequestObject(
@@ -146,13 +146,11 @@ class DefaultDispatcherTest {
                 supportedAlgorithms = listOf(Verifier.responseEncryptionKeyPair.algorithm as JWEAlgorithm),
                 supportedMethods = listOf(EncryptionMethod.A256GCM),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -459,7 +457,7 @@ class DefaultDispatcherTest {
                     responseMode,
                     query,
                     Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpConfiguration.vpFormatsSupported,
+                    Wallet.config.vpFormatsSupported,
                 )
 
             return ResolvedRequestObject(
@@ -875,7 +873,7 @@ class DefaultDispatcherTest {
                     ResponseMode.DCApiJwt,
                     query,
                     Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpConfiguration.vpFormatsSupported,
+                    Wallet.config.vpFormatsSupported,
                 )
 
             val resolvedRequestObject = createResolvedRequestObject(
