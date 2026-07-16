@@ -22,6 +22,7 @@ import com.nimbusds.jose.JWSVerifier
 import com.nimbusds.jose.crypto.ECDHDecrypter
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.JWKSet
+import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.oauth2.sdk.id.Issuer
 import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
@@ -379,6 +380,20 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
      */
     OnlyAuthenticatedClients,
 }
+
+/**
+ * Represents a policy to be applied on a registration certificate in the context of X.509-based trust.
+ *
+ * @property trust Defines the trust evaluation mechanism for an X.509 certificate chain,
+ *                 determining whether a given chain of X.509 certificates is trusted.
+ * @property apply A function that evaluates the policy based on inputs including the access certificate,
+ *                 the registration certificate, and the DCQL query. Returns a list of policy violations,
+ *                 if any, encountered during the evaluation.
+ */
+data class RegistrationCertificatePolicy(
+    val trust: X509CertificateTrust,
+    val apply: suspend (accessCertificate: X509Certificate, registrationCertificate: SignedJWT, dcql: DCQL) -> List<PolicyViolation>,
+)
 
 /**
  * Wallet configuration options for OpenId4VP protocol.

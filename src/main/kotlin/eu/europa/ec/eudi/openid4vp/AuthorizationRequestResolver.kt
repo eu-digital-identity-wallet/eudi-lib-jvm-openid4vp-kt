@@ -15,6 +15,7 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
+import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.Client.*
 import eu.europa.ec.eudi.openid4vp.dcql.CredentialQueryIds
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
@@ -211,7 +212,16 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
     init {
         require(attestations.isNotEmpty())
     }
+
     override fun toString(): String = attestations.toString()
+
+    val registrationCertificate: SignedJWT?
+        get() =
+            attestations.firstOrNull { it.format == Attestation.Format.REGISTRATION_CERTIFICATE }?.data?.let {
+                it.value.takeIf { it is JsonPrimitive }?.let {
+                    SignedJWT.parse(it.jsonPrimitive.content)
+                }
+            }
 
     @Serializable
     data class Attestation(
@@ -226,10 +236,12 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
             init {
                 require(value.isNotEmpty())
             }
+
             override fun toString(): String = value
 
             companion object {
                 val Jwt: Format get() = Format(OpenId4VPSpec.VERIFIER_INFO_FORMAT_JWT)
+                val REGISTRATION_CERTIFICATE: Format get() = Format(ETSI119472Part2.VERIFIER_INFO_REG_CERT_FORMAT)
             }
         }
 
@@ -239,6 +251,7 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
             init {
                 require((value is JsonPrimitive && value.isString) || (value is JsonObject))
             }
+
             override fun toString(): String = value.toString()
         }
     }
@@ -451,11 +464,63 @@ sealed interface ResolutionError : AuthorizationRequestError {
         @Suppress("unused")
         private fun readResolve(): Any = ClientVpFormatsNotSupportedFromWallet
     }
+
     data object UnsupportedDcApiExchangeProtocol : ResolutionError {
         @Suppress("unused")
         private fun readResolve(): Any = UnsupportedDcApiExchangeProtocol
     }
+
     data class DcApiExchangeProtocolNotMatchesReceivedRequest(val cause: String) : ResolutionError
+}
+
+/**
+ * Represents errors encountered during authorization policy validation.
+ * This interface serves as a marker for distinguishing between recoverable
+ * and non-recoverable validation errors, which might occur during the
+ * authorization request processing.
+ */
+sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError {
+
+    sealed interface Recoverable : AuthorizationPolicyValidationError {
+
+        data class AuthorizationPolicyNotMet(val violations: List<PolicyViolation>) : Recoverable
+
+        data object UnexpectedAuthenticatedClientType : Recoverable {
+            @Suppress("unused")
+            private fun readResolve(): Any = UnexpectedAuthenticatedClientType
+        }
+    }
+
+    sealed interface NonRecoverable : AuthorizationPolicyValidationError {
+
+        data object MissingRequiredRegistrationCertificate : NonRecoverable {
+            @Suppress("unused")
+            private fun readResolve(): Any = MissingRequiredRegistrationCertificate
+        }
+
+        data object RegistrationCertificateNotTrusted : NonRecoverable {
+            @Suppress("unused")
+            private fun readResolve(): Any = RegistrationCertificateNotTrusted
+        }
+
+        data class MalformedRegistrationCertificate(val cause: String) : NonRecoverable
+    }
+}
+
+/**
+ * Represents a specific type of violation of a policy or rule set.
+ *
+ * This class is used to encapsulate and enforce the domain-specific constraints
+ * that describe the nature of the violation. The violation description must not be empty.
+ *
+ * @param violation A non-empty string describing the policy violation.
+ * @throws IllegalArgumentException if the provided violation description is empty.
+ */
+@JvmInline
+value class PolicyViolation(val violation: String) {
+    init {
+        require(violation.isNotEmpty()) { "Violation cannot be empty" }
+    }
 }
 
 /**
@@ -487,7 +552,14 @@ sealed interface Resolution {
      * Represents the success of validating and resolving an authorization request
      * into a [requestObject]
      */
-    data class Success(val requestObject: ResolvedRequestObject) : Resolution
+    data class Success(
+        val requestObject: ResolvedRequestObject,
+        val recoverableErrors: List<AuthorizationRequestError>? = null,
+    ) : Resolution {
+
+        fun withRecoverableErrors(error: AuthorizationPolicyValidationError.Recoverable): Success =
+            copy(recoverableErrors = if (recoverableErrors == null) listOf(error) else recoverableErrors + error)
+    }
 
     /**
      * Represents the failure of validating or resolving an authorization request
