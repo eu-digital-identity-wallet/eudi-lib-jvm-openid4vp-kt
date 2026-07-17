@@ -15,7 +15,6 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.Client.*
 import eu.europa.ec.eudi.openid4vp.dcql.CredentialQueryIds
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
@@ -214,14 +213,6 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
     }
 
     override fun toString(): String = attestations.toString()
-
-    val registrationCertificate: SignedJWT?
-        get() =
-            attestations.firstOrNull { it.format == Attestation.Format.REGISTRATION_CERTIFICATE }?.data?.let {
-                it.value.takeIf { it is JsonPrimitive }?.let {
-                    SignedJWT.parse(it.jsonPrimitive.content)
-                }
-            }
 
     @Serializable
     data class Attestation(
@@ -474,52 +465,58 @@ sealed interface ResolutionError : AuthorizationRequestError {
 }
 
 /**
- * Represents errors encountered during authorization policy validation.
- * This interface serves as a marker for distinguishing between recoverable
- * and non-recoverable validation errors, which might occur during the
- * authorization request processing.
+ * Represents errors that can occur during the validation of authorization policies.
+ * These errors are specific to the evaluation of policies defined for authorization requests.
  */
 sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError {
 
-    sealed interface Recoverable : AuthorizationPolicyValidationError {
+    data object AuthorizationPolicyApplicableOnlyForX509HashClient : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = AuthorizationPolicyApplicableOnlyForX509HashClient
+    }
 
-        data class AuthorizationPolicyNotMet(val violations: List<PolicyViolation>) : Recoverable
+    data object MissingRequiredRegistrationCertificate : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = MissingRequiredRegistrationCertificate
+    }
 
-        data object UnexpectedAuthenticatedClientType : Recoverable {
-            @Suppress("unused")
-            private fun readResolve(): Any = UnexpectedAuthenticatedClientType
+    data object MultipleRegistrationCertificates : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = MultipleRegistrationCertificates
+    }
+
+    data object RegistrationCertificateNotTrusted : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = RegistrationCertificateNotTrusted
+    }
+
+    data class MalformedRegistrationCertificate(val cause: String) : AuthorizationPolicyValidationError {
+        init {
+            require(cause.isNotEmpty()) { "Cause cannot be empty" }
         }
     }
 
-    sealed interface NonRecoverable : AuthorizationPolicyValidationError {
-
-        data object MissingRequiredRegistrationCertificate : NonRecoverable {
-            @Suppress("unused")
-            private fun readResolve(): Any = MissingRequiredRegistrationCertificate
+    data class AuthorizationPolicyNotMet(val violations: List<PolicyViolation.Error>) : AuthorizationPolicyValidationError {
+        init {
+            require(violations.isNotEmpty()) { "Violations list must not be empty" }
         }
-
-        data object RegistrationCertificateNotTrusted : NonRecoverable {
-            @Suppress("unused")
-            private fun readResolve(): Any = RegistrationCertificateNotTrusted
-        }
-
-        data class MalformedRegistrationCertificate(val cause: String) : NonRecoverable
     }
 }
 
-/**
- * Represents a specific type of violation of a policy or rule set.
- *
- * This class is used to encapsulate and enforce the domain-specific constraints
- * that describe the nature of the violation. The violation description must not be empty.
- *
- * @param violation A non-empty string describing the policy violation.
- * @throws IllegalArgumentException if the provided violation description is empty.
- */
-@JvmInline
-value class PolicyViolation(val violation: String) {
-    init {
-        require(violation.isNotEmpty()) { "Violation cannot be empty" }
+sealed interface PolicyViolation {
+
+    @JvmInline
+    value class Error(val violation: String) : PolicyViolation {
+        init {
+            require(violation.isNotEmpty()) { "Violation cannot be empty" }
+        }
+    }
+
+    @JvmInline
+    value class Warning(val violation: String) : PolicyViolation {
+        init {
+            require(violation.isNotEmpty()) { "Violation cannot be empty" }
+        }
     }
 }
 
@@ -554,11 +551,11 @@ sealed interface Resolution {
      */
     data class Success(
         val requestObject: ResolvedRequestObject,
-        val recoverableErrors: List<AuthorizationRequestError>? = null,
+        val policyViolationWarnings: List<PolicyViolation.Warning>? = null,
     ) : Resolution {
 
-        fun withRecoverableErrors(error: AuthorizationPolicyValidationError.Recoverable): Success =
-            copy(recoverableErrors = if (recoverableErrors == null) listOf(error) else recoverableErrors + error)
+        fun withWarnings(warnings: List<PolicyViolation.Warning>): Success =
+            copy(policyViolationWarnings = if (policyViolationWarnings == null) warnings else policyViolationWarnings + warnings)
     }
 
     /**

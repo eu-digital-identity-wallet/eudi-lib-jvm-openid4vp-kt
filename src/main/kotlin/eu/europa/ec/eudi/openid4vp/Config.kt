@@ -392,7 +392,7 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  */
 data class RegistrationCertificatePolicy(
     val trust: X509CertificateTrust,
-    val apply: suspend (accessCertificate: X509Certificate, registrationCertificate: SignedJWT, dcql: DCQL) -> List<PolicyViolation>,
+    val apply: suspend (accessCertificate: X509Certificate, registrationCertificate: SignedJWT, dcql: DCQL) -> List<PolicyViolation>?,
 )
 
 /**

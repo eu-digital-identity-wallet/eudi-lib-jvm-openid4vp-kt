@@ -44,6 +44,7 @@ sealed interface OpenId4Vp {
         fun overRedirects(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
+            policy: RegistrationCertificatePolicy? = null,
         ): OverRedirects {
             val requestResolver = DefaultRequestResolverOverHttp(openId4VPConfig, httpClient)
             val dispatcher = DefaultDispatcherOverHttp(httpClient)
@@ -51,40 +52,34 @@ sealed interface OpenId4Vp {
                 AuthorizationRequestOverHttpResolver by requestResolver,
                 DispatcherOverHttp by dispatcher,
                 ErrorDispatcher by dispatcher,
-                OverRedirects {}
+                OverRedirects {
+
+                override suspend fun resolveRequestUri(uri: String): Resolution =
+                    when (policy) {
+                        null -> this.resolveRequestUri(uri)
+                        else -> this.resolveRequestUri(uri).authorizeByPolicy(policy)
+                    }
+            }
         }
 
         fun overDcApi(
             openId4VPConfig: OpenId4VPConfig,
+            policy: RegistrationCertificatePolicy? = null,
         ): OverDcAPI {
             val requestResolver = DefaultRequestResolverOverDCApi(openId4VPConfig)
             val dispatcher = DefaultDCApiResponseBuilder()
             return object :
                 AuthorizationRequestOverDCApiResolver by requestResolver,
                 DCApiResponseBuilder by dispatcher,
-                OverDcAPI {}
-        }
-
-        fun OverRedirects.wrprc(policy: RegistrationCertificatePolicy): OverRedirects =
-            object :
-                AuthorizationRequestOverHttpResolver by this,
-                DispatcherOverHttp by this,
-                ErrorDispatcher by this,
-                OverRedirects {
-
-                override suspend fun resolveRequestUri(uri: String): Resolution =
-                    this.resolveRequestUri(uri).authorizeByPolicy(policy)
-            }
-
-        fun OverDcAPI.wrprc(policy: RegistrationCertificatePolicy): OverDcAPI =
-            object :
-                AuthorizationRequestOverDCApiResolver by this,
-                DCApiResponseBuilder by this,
                 OverDcAPI {
 
                 override suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution =
-                    this.resolveRequestObject(protocol, origin, requestData).authorizeByPolicy(policy)
+                    when (policy) {
+                        null -> this.resolveRequestObject(protocol, origin, requestData)
+                        else -> this.resolveRequestObject(protocol, origin, requestData).authorizeByPolicy(policy)
+                    }
             }
+        }
 
         private suspend fun Resolution.authorizeByPolicy(
             policy: RegistrationCertificatePolicy,
@@ -92,18 +87,11 @@ sealed interface OpenId4Vp {
             is Resolution.Invalid -> this
             is Resolution.Success -> {
                 try {
-                    with(RequestAuthorizer(policy)) { authorize(requestObject) }
+                    val warnings = with(RequestAuthorizer(policy)) { authorize(requestObject) }
+                    this@authorizeByPolicy.withWarnings(warnings)
                 } catch (e: AuthorizationRequestException) {
-                    when (val error = e.error) {
-                        is AuthorizationPolicyValidationError.Recoverable -> {
-                            this.withRecoverableErrors(error)
-                        }
-                        else -> {
-                            Resolution.Invalid(error, requestObject.errorDispatchDetails())
-                        }
-                    }
+                    Resolution.Invalid(e.error, requestObject.errorDispatchDetails())
                 }
-                this
             }
         }
 

@@ -25,11 +25,12 @@ import com.nimbusds.jose.util.X509CertUtils
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.jwt.proc.DefaultJWTProcessor
 import eu.europa.ec.eudi.openid4vp.*
-import eu.europa.ec.eudi.openid4vp.AuthorizationPolicyValidationError.NonRecoverable.*
-import eu.europa.ec.eudi.openid4vp.AuthorizationPolicyValidationError.Recoverable.AuthorizationPolicyNotMet
-import eu.europa.ec.eudi.openid4vp.AuthorizationPolicyValidationError.Recoverable.UnexpectedAuthenticatedClientType
+import eu.europa.ec.eudi.openid4vp.AuthorizationPolicyValidationError.*
+import eu.europa.ec.eudi.openid4vp.VerifierInfo.Attestation
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.ensureNotNull
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.jsonPrimitive
 import java.security.cert.X509Certificate
 
 /**
@@ -52,34 +53,62 @@ import java.security.cert.X509Certificate
  */
 internal fun interface RequestAuthorizer {
 
-    suspend fun authorize(request: ResolvedRequestObject)
+    suspend fun authorize(request: ResolvedRequestObject): List<PolicyViolation.Warning>
 
     companion object {
+
         operator fun invoke(
             policy: RegistrationCertificatePolicy,
         ): RequestAuthorizer = RequestAuthorizer { request ->
 
+            val authenticatedClient = request.client
+            ensure(authenticatedClient is Client.X509Hash) { AuthorizationPolicyApplicableOnlyForX509HashClient.asException() }
+
             val verifierInfo = request.verifierInfo
             ensureNotNull(verifierInfo) { MissingRequiredRegistrationCertificate.asException() }
 
-            val wrprc = verifierInfo.registrationCertificate
-            ensureNotNull(wrprc) { MissingRequiredRegistrationCertificate.asException() }
+            val wrprc = verifierInfo.registrationCertificate()
 
             val x5c = wrprc.trustedX509CertChain(policy.trust)
             wrprc.verifySignature(x5c)
 
-            val authorizedClient = request.client
-            ensure(authorizedClient is Client.X509Hash) { UnexpectedAuthenticatedClientType.asException() }
+            val violations = policy.apply(authenticatedClient.cert, wrprc, request.query)
 
-            val violations = policy.apply(authorizedClient.cert, wrprc, request.query)
-            ensure(violations.isEmpty()) { AuthorizationPolicyNotMet(violations).asException() }
+            if (violations != null) {
+                val errors = violations.filterIsInstance<PolicyViolation.Error>()
+                ensure(errors.isEmpty()) { AuthorizationPolicyNotMet(errors).asException() }
+
+                violations.filterIsInstance<PolicyViolation.Warning>()
+            } else
+                emptyList()
         }
     }
 }
 
+private fun VerifierInfo.registrationCertificate(): SignedJWT {
+    val registrationCertificates = attestations.filter { it.format == Attestation.Format.REGISTRATION_CERTIFICATE }
+    ensure(registrationCertificates.isNotEmpty()) { MissingRequiredRegistrationCertificate.asException() }
+    ensure(registrationCertificates.size == 1) { MultipleRegistrationCertificates.asException() }
+    val wrprcAttestation = registrationCertificates.first()
+    ensure(wrprcAttestation.credentialIds == null) {
+        malformedRegistrationCertificate("Provided credentialIds with registrations certificate while not expected")
+    }
+    val wrprc = try {
+        val element = wrprcAttestation.data.value
+        ensure(element is JsonPrimitive) {
+            malformedRegistrationCertificate("Provided registration certificate is not a JSON primitive")
+        }
+        SignedJWT.parse(element.jsonPrimitive.content)
+    } catch (e: Exception) {
+        throw malformedRegistrationCertificate("Provided registration certificate is not a valid signed JWT: ${e.message}")
+    }
+
+    return wrprc
+}
+
 private fun SignedJWT.trustedX509CertChain(trust: X509CertificateTrust): List<X509Certificate> {
     val x5c = header?.x509CertChain
-    ensureNotNull(x5c) { malformedRegistrationCertificate("Missing x5c") }
+    ensureNotNull(x5c) { malformedRegistrationCertificate("Missing x5c header") }
     val pubCertChain = x5c.mapNotNull { runCatchingCancellable { X509CertUtils.parse(it.decode()) }.getOrNull() }
     ensure(pubCertChain.isNotEmpty()) { malformedRegistrationCertificate("Invalid x5c") }
     ensure(trust.isTrusted(pubCertChain)) { RegistrationCertificateNotTrusted.asException() }
@@ -89,14 +118,14 @@ private fun SignedJWT.trustedX509CertChain(trust: X509CertificateTrust): List<X5
 private fun SignedJWT.verifySignature(x5c: List<X509Certificate>) {
     try {
         val jwtProcessor = DefaultJWTProcessor<SecurityContext>().apply {
-            jwsTypeVerifier = DefaultJOSEObjectTypeVerifier(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
-            jwsKeySelector = JWSKeySelector<SecurityContext> { _, _ -> listOf(x5c.first().publicKey) }
+            jwsTypeVerifier = DefaultJOSEObjectTypeVerifier(JOSEObjectType(ETSI119475.REG_CERT_HEADER_TYPE))
+            jwsKeySelector = JWSKeySelector { _, _ -> listOf(x5c.first().publicKey) }
         }
         jwtProcessor.process(this, null)
     } catch (e: JOSEException) {
-        throw RuntimeException(e)
+        throw malformedRegistrationCertificate("Could not verify signature of registration certificate: ${e.message}")
     } catch (e: BadJOSEException) {
-        throw malformedRegistrationCertificate("Registration certificate invalid signature ${e.message}")
+        throw malformedRegistrationCertificate("Registration certificate invalid signature: ${e.message}")
     }
 }
 
