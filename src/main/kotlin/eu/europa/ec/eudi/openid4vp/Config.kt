@@ -24,7 +24,6 @@ import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.oauth2.sdk.id.Issuer
-import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import java.net.URI
@@ -57,7 +56,7 @@ data class PreregisteredClient(
 }
 
 fun interface X509CertificateTrust {
-    fun isTrusted(chain: List<X509Certificate>): Boolean
+    suspend fun isTrusted(chain: List<X509Certificate>): Boolean
 }
 
 fun interface LookupPublicKeyByDIDUrl {

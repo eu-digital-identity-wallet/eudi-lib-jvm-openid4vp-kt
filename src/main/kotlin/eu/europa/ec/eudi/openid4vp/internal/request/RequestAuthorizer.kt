@@ -17,6 +17,8 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 
 import com.nimbusds.jose.JOSEException
 import com.nimbusds.jose.JOSEObjectType
+import com.nimbusds.jose.jwk.AsymmetricJWK
+import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.proc.BadJOSEException
 import com.nimbusds.jose.proc.DefaultJOSEObjectTypeVerifier
 import com.nimbusds.jose.proc.JWSKeySelector
@@ -106,12 +108,19 @@ private fun VerifierInfo.registrationCertificate(): SignedJWT {
     return wrprc
 }
 
-private fun SignedJWT.trustedX509CertChain(trust: X509CertificateTrust): List<X509Certificate> {
+private suspend fun SignedJWT.trustedX509CertChain(trust: X509CertificateTrust): List<X509Certificate> {
     val x5c = header?.x509CertChain
     ensureNotNull(x5c) { malformedRegistrationCertificate("Missing x5c header") }
     val pubCertChain = x5c.mapNotNull { runCatchingCancellable { X509CertUtils.parse(it.decode()) }.getOrNull() }
     ensure(pubCertChain.isNotEmpty()) { malformedRegistrationCertificate("Invalid x5c") }
     ensure(trust.isTrusted(pubCertChain)) { RegistrationCertificateNotTrusted.asException() }
+
+    val leafCert = pubCertChain.first()
+    val jwk = JWK.parse(leafCert)
+    ensure(jwk is AsymmetricJWK) {
+        malformedRegistrationCertificate("WRPRC signing key must be asymmetric")
+    }
+
     return pubCertChain
 }
 

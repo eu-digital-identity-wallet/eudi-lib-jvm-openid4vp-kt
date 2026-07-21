@@ -109,6 +109,7 @@ object OpenId4VPSpec {
 object ETSI119472Part2 {
     const val VERIFIER_INFO_REG_CERT_FORMAT = "registration_cert"
 }
+
 object ETSI119475 {
     const val REG_CERT_HEADER_TYPE = "rc-wrp+jwt"
 }

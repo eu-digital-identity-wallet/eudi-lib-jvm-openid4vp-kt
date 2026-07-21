@@ -505,15 +505,17 @@ sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError 
 
 sealed interface PolicyViolation {
 
+    val violation: String
+
     @JvmInline
-    value class Error(val violation: String) : PolicyViolation {
+    value class Error(override val violation: String) : PolicyViolation {
         init {
             require(violation.isNotEmpty()) { "Violation cannot be empty" }
         }
     }
 
     @JvmInline
-    value class Warning(val violation: String) : PolicyViolation {
+    value class Warning(override val violation: String) : PolicyViolation {
         init {
             require(violation.isNotEmpty()) { "Violation cannot be empty" }
         }
