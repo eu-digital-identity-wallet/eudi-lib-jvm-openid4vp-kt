@@ -17,7 +17,7 @@ package eu.europa.ec.eudi.openid4vp
 
 import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
 import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
-import eu.europa.ec.eudi.openid4vp.internal.request.RequestAuthorizer
+import eu.europa.ec.eudi.openid4vp.internal.request.RegistrationCertificatePolicyEvaluator
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDCApiResponseBuilder
 import eu.europa.ec.eudi.openid4vp.internal.response.DefaultDispatcherOverHttp
 import io.ktor.client.*
@@ -44,7 +44,6 @@ sealed interface OpenId4Vp {
         fun overRedirects(
             openId4VPConfig: OpenId4VPConfig,
             httpClient: HttpClient,
-            policy: RegistrationCertificatePolicy? = null,
         ): OverRedirects {
             val requestResolver = DefaultRequestResolverOverHttp(openId4VPConfig, httpClient)
             val dispatcher = DefaultDispatcherOverHttp(httpClient)
@@ -54,17 +53,20 @@ sealed interface OpenId4Vp {
                 ErrorDispatcher by dispatcher,
                 OverRedirects {
 
-                override suspend fun resolveRequestUri(uri: String): Resolution =
-                    when (policy) {
-                        null -> this.resolveRequestUri(uri)
-                        else -> this.resolveRequestUri(uri).authorizeByPolicy(policy)
+                override suspend fun resolveRequestUri(uri: String): Resolution {
+                    val policy = openId4VPConfig.registrationCertificatePolicy
+                    return when (policy) {
+                        null -> requestResolver.resolveRequestUri(uri)
+                        else -> requestResolver.resolveRequestUri(uri).andThen { requestObject, _ ->
+                            requestObject.applyPolicy(policy)
+                        }
                     }
+                }
             }
         }
 
         fun overDcApi(
             openId4VPConfig: OpenId4VPConfig,
-            policy: RegistrationCertificatePolicy? = null,
         ): OverDcAPI {
             val requestResolver = DefaultRequestResolverOverDCApi(openId4VPConfig)
             val dispatcher = DefaultDCApiResponseBuilder()
@@ -73,27 +75,37 @@ sealed interface OpenId4Vp {
                 DCApiResponseBuilder by dispatcher,
                 OverDcAPI {
 
-                override suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution =
-                    when (policy) {
-                        null -> this.resolveRequestObject(protocol, origin, requestData)
-                        else -> this.resolveRequestObject(protocol, origin, requestData).authorizeByPolicy(policy)
+                override suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution {
+                    val policy = openId4VPConfig.registrationCertificatePolicy
+                    return when (policy) {
+                        null -> requestResolver.resolveRequestObject(protocol, origin, requestData)
+                        else -> requestResolver.resolveRequestObject(protocol, origin, requestData).andThen { requestObject, _ ->
+                            requestObject.applyPolicy(policy)
+                        }
                     }
-            }
-        }
-
-        private suspend fun Resolution.authorizeByPolicy(
-            policy: RegistrationCertificatePolicy,
-        ): Resolution = when (this) {
-            is Resolution.Invalid -> this
-            is Resolution.Success -> {
-                try {
-                    val warnings = with(RequestAuthorizer(policy)) { authorize(requestObject) }
-                    this@authorizeByPolicy.withWarnings(warnings)
-                } catch (e: AuthorizationRequestException) {
-                    Resolution.Invalid(e.error, requestObject.errorDispatchDetails())
                 }
             }
         }
+
+        private suspend fun ResolvedRequestObject.applyPolicy(
+            policy: RegistrationCertificatePolicy,
+        ): Resolution =
+            try {
+                val policyEvaluator = RegistrationCertificatePolicyEvaluator(policy)
+                val authorization = policyEvaluator.evaluate(this)
+                when (authorization) {
+                    is RegistrationCertificatePolicy.Authorization.Granted ->
+                        Resolution.Success(this, authorization.warnings ?: emptyList())
+
+                    is RegistrationCertificatePolicy.Authorization.NotGranted ->
+                        Resolution.Invalid(
+                            AuthorizationPolicyValidationError.AuthorizationPolicyNotMet(authorization.error),
+                            this.errorDispatchDetails(),
+                        )
+                }
+            } catch (e: AuthorizationRequestException) {
+                Resolution.Invalid(e.error, this.errorDispatchDetails())
+            }
 
         private fun ResolvedRequestObject.errorDispatchDetails(): ErrorDispatchDetails =
             ErrorDispatchDetails(

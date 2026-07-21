@@ -496,30 +496,7 @@ sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError 
         }
     }
 
-    data class AuthorizationPolicyNotMet(val violations: List<PolicyViolation.Error>) : AuthorizationPolicyValidationError {
-        init {
-            require(violations.isNotEmpty()) { "Violations list must not be empty" }
-        }
-    }
-}
-
-sealed interface PolicyViolation {
-
-    val violation: String
-
-    @JvmInline
-    value class Error(override val violation: String) : PolicyViolation {
-        init {
-            require(violation.isNotEmpty()) { "Violation cannot be empty" }
-        }
-    }
-
-    @JvmInline
-    value class Warning(override val violation: String) : PolicyViolation {
-        init {
-            require(violation.isNotEmpty()) { "Violation cannot be empty" }
-        }
-    }
+    data class AuthorizationPolicyNotMet(val violation: RegistrationCertificatePolicy.PolicyViolation) : AuthorizationPolicyValidationError
 }
 
 /**
@@ -549,16 +526,13 @@ fun <T> AuthorizationRequestError.asFailure(): Result<T> =
 sealed interface Resolution {
     /**
      * Represents the success of validating and resolving an authorization request
-     * into a [requestObject]
+     * into a [requestObject]. It might include a list of [policyViolationWarnings] that are the result of
+     * evaluating that the [ResolvedRequestObject] complies with a pre-configured registration certificate policy.
      */
     data class Success(
         val requestObject: ResolvedRequestObject,
-        val policyViolationWarnings: List<PolicyViolation.Warning>? = null,
-    ) : Resolution {
-
-        fun withWarnings(warnings: List<PolicyViolation.Warning>): Success =
-            copy(policyViolationWarnings = if (policyViolationWarnings == null) warnings else policyViolationWarnings + warnings)
-    }
+        val policyViolationWarnings: List<RegistrationCertificatePolicy.PolicyViolation> = emptyList(),
+    ) : Resolution
 
     /**
      * Represents the failure of validating or resolving an authorization request
@@ -574,6 +548,14 @@ sealed interface Resolution {
         }
     }
 }
+
+suspend fun Resolution.andThen(
+    f: suspend (ResolvedRequestObject, List<RegistrationCertificatePolicy.PolicyViolation>?) -> Resolution,
+): Resolution =
+    when (this) {
+        is Resolution.Success -> f(requestObject, policyViolationWarnings)
+        is Resolution.Invalid -> this
+    }
 
 /**
  * Information required for an [AuthorizationRequestError] to be dispatchable.

@@ -23,6 +23,7 @@ import com.nimbusds.jose.proc.BadJOSEException
 import com.nimbusds.jose.proc.DefaultJOSEObjectTypeVerifier
 import com.nimbusds.jose.proc.JWSKeySelector
 import com.nimbusds.jose.proc.SecurityContext
+import com.nimbusds.jose.util.JSONObjectUtils
 import com.nimbusds.jose.util.X509CertUtils
 import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.jwt.proc.DefaultJWTProcessor
@@ -31,6 +32,8 @@ import eu.europa.ec.eudi.openid4vp.AuthorizationPolicyValidationError.*
 import eu.europa.ec.eudi.openid4vp.VerifierInfo.Attestation
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.ensureNotNull
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.jsonPrimitive
 import java.security.cert.X509Certificate
@@ -51,38 +54,37 @@ import java.security.cert.X509Certificate
  *
  * Companion Object:
  * - Provides a factory-style `invoke` operator function to create an instance
- *   of `RequestAuthorizer` with specific policy enforcement.
+ *   of `RegistrationCertificatePolicyEvaluator` with specific policy enforcement.
  */
-internal fun interface RequestAuthorizer {
+internal fun interface RegistrationCertificatePolicyEvaluator {
 
-    suspend fun authorize(request: ResolvedRequestObject): List<PolicyViolation.Warning>
+    suspend fun evaluate(request: ResolvedRequestObject): RegistrationCertificatePolicy.Authorization
 
     companion object {
 
         operator fun invoke(
             policy: RegistrationCertificatePolicy,
-        ): RequestAuthorizer = RequestAuthorizer { request ->
+        ): RegistrationCertificatePolicyEvaluator = RegistrationCertificatePolicyEvaluator { request ->
 
             val authenticatedClient = request.client
-            ensure(authenticatedClient is Client.X509Hash) { AuthorizationPolicyApplicableOnlyForX509HashClient.asException() }
+            if (authenticatedClient !is Client.X509Hash) {
+                RegistrationCertificatePolicy.Authorization.Granted()
+            } else {
+                val verifierInfo = request.verifierInfo
+                ensureNotNull(verifierInfo) { MissingRequiredRegistrationCertificate.asException() }
 
-            val verifierInfo = request.verifierInfo
-            ensureNotNull(verifierInfo) { MissingRequiredRegistrationCertificate.asException() }
+                val wrprc = verifierInfo.registrationCertificate()
 
-            val wrprc = verifierInfo.registrationCertificate()
+                val x5c = wrprc.trustedX509CertChain(policy.trust)
+                wrprc.verifySignature(x5c)
 
-            val x5c = wrprc.trustedX509CertChain(policy.trust)
-            wrprc.verifySignature(x5c)
-
-            val violations = policy.apply(authenticatedClient.cert, wrprc, request.query)
-
-            if (violations != null) {
-                val errors = violations.filterIsInstance<PolicyViolation.Error>()
-                ensure(errors.isEmpty()) { AuthorizationPolicyNotMet(errors).asException() }
-
-                violations.filterIsInstance<PolicyViolation.Warning>()
-            } else
-                emptyList()
+                val wrprcClaimset = wrprc.jwtClaimsSet.toJSONObject().toKotlinxJsonObject()
+                policy.apply(
+                    authenticatedClient.cert,
+                    wrprcClaimset,
+                    request.query,
+                )
+            }
         }
     }
 }
@@ -111,7 +113,7 @@ private fun VerifierInfo.registrationCertificate(): SignedJWT {
 private suspend fun SignedJWT.trustedX509CertChain(trust: X509CertificateTrust): List<X509Certificate> {
     val x5c = header?.x509CertChain
     ensureNotNull(x5c) { malformedRegistrationCertificate("Missing x5c header") }
-    val pubCertChain = x5c.mapNotNull { runCatchingCancellable { X509CertUtils.parse(it.decode()) }.getOrNull() }
+    val pubCertChain = x5c.mapNotNull { X509CertUtils.parse(it.decode()) }
     ensure(pubCertChain.isNotEmpty()) { malformedRegistrationCertificate("Invalid x5c") }
     ensure(trust.isTrusted(pubCertChain)) { RegistrationCertificateNotTrusted.asException() }
 
@@ -136,6 +138,11 @@ private fun SignedJWT.verifySignature(x5c: List<X509Certificate>) {
     } catch (e: BadJOSEException) {
         throw malformedRegistrationCertificate("Registration certificate invalid signature: ${e.message}")
     }
+}
+
+private fun Map<String, Any?>.toKotlinxJsonObject(): JsonObject {
+    val jsonString = JSONObjectUtils.toJSONString(this)
+    return Json.decodeFromString(jsonString)
 }
 
 private fun malformedRegistrationCertificate(cause: String): AuthorizationRequestException =
