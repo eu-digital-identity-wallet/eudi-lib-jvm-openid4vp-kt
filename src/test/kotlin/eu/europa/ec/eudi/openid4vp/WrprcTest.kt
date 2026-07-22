@@ -17,16 +17,17 @@ package eu.europa.ec.eudi.openid4vp
 
 import com.nimbusds.jose.JWSAlgorithm
 import eu.europa.ec.eudi.openid4vp.RegistrationCertificatePolicy.PolicyViolation
-import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
-import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedRequestObject
 import eu.europa.ec.eudi.openid4vp.internal.request.VerifierInfoTO
 import eu.europa.ec.eudi.openid4vp.internal.request.randomKey
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.*
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 import org.junit.jupiter.api.*
 import java.io.InputStream
 import java.net.URLEncoder
@@ -114,24 +115,6 @@ class WrprcTest {
             httpClient.close()
         }
 
-        private fun unvalidatedRequestOverRedirects(
-            clientId: String,
-            verifierInfo: VerifierInfo? = null,
-        ): UnvalidatedRequestObject {
-            val request = UnvalidatedRequestObject(
-                clientId = clientId,
-                responseMode = "direct_post",
-                responseType = "vp_token",
-                responseUri = "https://verifier.example.gr",
-                nonce = "nonce",
-                state = "state",
-                dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
-                clientMetaData = Json.decodeFromString<JsonObject>(Json.encodeToString(unvalidatedClientMetaData)),
-                verifierInfo = verifierInfo.toVerifierInfoTO(),
-            )
-            return request
-        }
-
         private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverRedirects =
             OpenId4Vp.overRedirects(walletConfig, httpClient)
 
@@ -144,6 +127,8 @@ class WrprcTest {
 
             val signedJwt = unvalidatedRequestOverRedirects(
                 clientId = clientId,
+                clientMetadata = unvalidatedClientMetaData,
+                dcqlQuery = dcqlQuery,
                 verifierInfo = null,
             ).signWithKeystore()
 
@@ -170,6 +155,8 @@ class WrprcTest {
 
             val signedJwt = unvalidatedRequestOverRedirects(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = null,
             ).signWithKeystore()
 
@@ -211,6 +198,8 @@ class WrprcTest {
 
             val signedJwt = unvalidatedRequestOverRedirects(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = verifierInfo,
             ).signWithKeystore()
 
@@ -247,6 +236,8 @@ class WrprcTest {
 
             val signedJwt = unvalidatedRequestOverRedirects(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = verifierInfo,
             ).signWithKeystore()
 
@@ -267,23 +258,6 @@ class WrprcTest {
         private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverDcAPI =
             OpenId4Vp.overDcApi(walletConfig)
 
-        private fun unvalidatedRequestOverDCApi(
-            clientId: String,
-            verifierInfo: VerifierInfo? = null,
-        ): UnvalidatedRequestObject {
-            val request = UnvalidatedRequestObject(
-                clientId = clientId,
-                responseMode = "dc_api",
-                responseType = "vp_token",
-                nonce = "nonce",
-                dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
-                clientMetaData = Json.decodeFromString<JsonObject>(Json.encodeToString(unvalidatedClientMetaData)),
-                expectedOrigins = listOf(ORIGIN),
-                verifierInfo = verifierInfo.toVerifierInfoTO(),
-            )
-            return request
-        }
-
         @Test
         fun `and registration policy is not set, requests without WRPRC can be resolved`() = runTest {
             val openId4Vp = openId4Vp(walletConfig)
@@ -291,6 +265,9 @@ class WrprcTest {
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
             val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                expectedOrigins = listOf(ORIGIN),
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = null,
             ).signWithKeystore()
 
@@ -320,6 +297,9 @@ class WrprcTest {
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
             val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                expectedOrigins = listOf(ORIGIN),
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = null,
             ).signWithKeystore()
 
@@ -361,6 +341,9 @@ class WrprcTest {
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
             val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                expectedOrigins = listOf(ORIGIN),
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = verifierInfo,
             ).signWithKeystore()
 
@@ -399,6 +382,9 @@ class WrprcTest {
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
             val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
+                dcqlQuery = dcqlQuery,
+                expectedOrigins = listOf(ORIGIN),
+                clientMetadata = unvalidatedClientMetaData,
                 verifierInfo = verifierInfo,
             ).signWithKeystore()
 

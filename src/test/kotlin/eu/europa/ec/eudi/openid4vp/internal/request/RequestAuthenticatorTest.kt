@@ -15,12 +15,16 @@
  */
 package eu.europa.ec.eudi.openid4vp.internal.request
 
-import com.nimbusds.jose.*
-import com.nimbusds.jose.crypto.factories.DefaultJWSSignerFactory
-import com.nimbusds.jose.jwk.*
+import com.nimbusds.jose.JOSEException
+import com.nimbusds.jose.JWSAlgorithm
+import com.nimbusds.jose.JWSHeader
+import com.nimbusds.jose.JWSVerifier
+import com.nimbusds.jose.jwk.Curve
+import com.nimbusds.jose.jwk.ECKey
+import com.nimbusds.jose.jwk.JWKSet
+import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jose.util.Base64URL
-import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
 import eu.europa.ec.eudi.openid4vp.internal.DID
@@ -516,29 +520,3 @@ private inline fun <reified E : AuthorizationRequestError> assertFailsWithError(
 
 private fun UnvalidatedRequestObject.unsigned(): ReceivedRequest.Unsigned =
     ReceivedRequest.Unsigned(this)
-
-private fun UnvalidatedRequestObject.signedWithAttestation(
-    alg: JWSAlgorithm,
-    key: JWK,
-    attestation: SignedJWT,
-): ReceivedRequest.Signed = signed(alg, key) {
-    this.customParam("jwt", attestation.serialize())
-}
-
-private fun UnvalidatedRequestObject.signed(
-    alg: JWSAlgorithm,
-    key: JWK,
-    headerCustomization: (JWSHeader.Builder).() -> Unit = {},
-): ReceivedRequest.Signed {
-    val header = with(JWSHeader.Builder(alg)) {
-        type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
-        headerCustomization()
-        build()
-    }
-    val claimsSet = toJWTClaimSet()
-    val jwt = SignedJWT(header, claimsSet).apply {
-        val signer = DefaultJWSSignerFactory().createJWSSigner(key, alg)
-        sign(signer)
-    }
-    return ReceivedRequest.Signed(jwt)
-}

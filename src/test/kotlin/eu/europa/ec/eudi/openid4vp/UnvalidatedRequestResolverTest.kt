@@ -15,23 +15,14 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
-import com.fasterxml.jackson.databind.ObjectMapper
-import com.fasterxml.jackson.module.kotlin.readValue
 import com.nimbusds.jose.JOSEObjectType
 import com.nimbusds.jose.JWSAlgorithm
-import com.nimbusds.jose.JWSHeader
-import com.nimbusds.jose.crypto.factories.DefaultJWSSignerFactory
-import com.nimbusds.jose.jwk.JWKMatcher
 import com.nimbusds.jose.jwk.JWKSet
-import com.nimbusds.jose.jwk.KeyType
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
-import com.nimbusds.jwt.JWTClaimsSet
-import com.nimbusds.jwt.SignedJWT
 import com.nimbusds.oauth2.sdk.id.State
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.MissingExpectedOrigins
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.UnexpectedOrigin
-import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.dcql.QueryId
 import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
@@ -55,7 +46,6 @@ import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.TestInstance
 import java.io.InputStream
 import java.net.URLEncoder
-import java.security.KeyStore
 import java.security.cert.X509Certificate
 import java.time.Clock
 import java.util.*
@@ -66,9 +56,7 @@ import kotlin.collections.first
 import kotlin.collections.forEach
 import kotlin.collections.indices
 import kotlin.collections.listOf
-import kotlin.collections.map
 import kotlin.collections.setOf
-import kotlin.collections.toMutableList
 import kotlin.test.*
 import kotlin.test.assertNotNull
 
@@ -93,6 +81,7 @@ class UnvalidatedRequestResolverTest {
     fun teardown() {
         httpClient.close()
     }
+
     private fun resolver() = DefaultRequestResolverOverHttp(walletConfig, httpClient)
 
     private val dcqlQuery = readFileAsText("dcql/basic_example.json")
@@ -100,7 +89,8 @@ class UnvalidatedRequestResolverTest {
         .replace("\r", "")
         .replace("\n", "")
         .replace("  ", "")
-        .let { URLEncoder.encode(it, "UTF-8") }
+
+    private val dcqlQueryURLEncoded = dcqlQuery.let { URLEncoder.encode(it, "UTF-8") }
 
     private val signingKey = RSAKeyGenerator(2048)
         .keyUse(KeyUse.SIGNATURE) // indicate the intended use of the key (optional)
@@ -206,7 +196,7 @@ class UnvalidatedRequestResolverTest {
                     "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                     "&nonce=n-0S6_WzA2Mj" +
                     (state?.let { "&state=$it" } ?: "") +
-                    "&dcql_query=$dcqlQuery" +
+                    "&dcql_query=$dcqlQueryURLEncoded" +
                     "&client_metadata=$clientMetadataJwksInline"
 
             val resolution = resolver().resolveRequestUri(authRequest)
@@ -228,7 +218,7 @@ class UnvalidatedRequestResolverTest {
                     "&response_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                     "&nonce=n-0S6_WzA2Mj" +
                     (state?.let { "&state=$it" } ?: "") +
-                    "&dcql_query=$dcqlQuery"
+                    "&dcql_query=$dcqlQueryURLEncoded"
 
             val resolution = resolver().resolveRequestUri(authRequest)
 
@@ -253,19 +243,16 @@ class UnvalidatedRequestResolverTest {
                         ),
                 ),
             )
-            val jwtClaimsSet = jwtClaimsSet(
-                "Verifier",
-                "https://eudi.netcompany-intrasoft.com/wallet/direct_post",
-                unvalidatedClientMetaData,
-            )
+            val signedJwt = unvalidatedRequestOverRedirects(
+                clientId = "Verifier",
+                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                responseUri = "https://eudi.netcompany-intrasoft.com/wallet/direct_post",
+                clientMetadata = unvalidatedClientMetaData,
+            ).signWithJwkSet(jwkSet, typ)
 
-            val signedJwt = createSignedRequestJwt(jwkSet, jwtClaimsSet, typ)
-            val authRequest =
-                """
-             http://localhost:8080/public_url?client_id=Verifier&request=$signedJwt
-                """.trimIndent()
-
+            val authRequest = "http://localhost:8080/public_url?client_id=Verifier&request=$signedJwt"
             val resolution = resolver().resolveRequestUri(authRequest)
+
             assertions(resolution)
         }
 
@@ -284,16 +271,12 @@ class UnvalidatedRequestResolverTest {
     @Test
     fun `JAR auth request, request passed as JWT, verified with x509_san_dns prefix`() = runTest {
         suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(
-                load("certificates/certificates.jks"),
-                "12345".toCharArray(),
-            )
             val clientId = "x509_san_dns:verifier.example.gr"
-            val jwtClaimsSet = jwtClaimsSet(
-                clientId,
-                "https://verifier.example.gr/wallet/direct_post",
-                UnvalidatedClientMetaData(
+            val signedJwt = unvalidatedRequestOverRedirects(
+                clientId = clientId,
+                responseUri = "https://verifier.example.gr/wallet/direct_post",
+                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                clientMetadata = UnvalidatedClientMetaData(
                     jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
                     vpFormatsSupported = VpFormatsSupported(
                         msoMdoc =
@@ -303,8 +286,8 @@ class UnvalidatedRequestResolverTest {
                             ),
                     ),
                 ),
-            )
-            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+            ).signWithKeystore(typ)
+
             val authRequest = "http://localhost:8080/public_url?client_id=$clientId&request=$signedJwt"
 
             val resolution = resolver().resolveRequestUri(authRequest)
@@ -326,18 +309,13 @@ class UnvalidatedRequestResolverTest {
     @Test
     fun `JAR auth request, request passed as JWT, verified with x509_hash prefix`() = runTest {
         suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(
-                load("certificates/certificates.jks"),
-                "12345".toCharArray(),
-
-            )
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
             val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
-            val jwtClaimsSet = jwtClaimsSet(
-                clientId,
-                "https://verifier.example.gr",
-                UnvalidatedClientMetaData(
+            val signedJwt = unvalidatedRequestOverRedirects(
+                clientId = clientId,
+                responseUri = "https://verifier.example.gr",
+                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                clientMetadata = UnvalidatedClientMetaData(
                     jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
                     vpFormatsSupported = VpFormatsSupported(
                         msoMdoc =
@@ -347,11 +325,11 @@ class UnvalidatedRequestResolverTest {
                             ),
                     ),
                 ),
-            )
-            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+            ).signWithKeystore(typ)
 
+            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
             val resolution = resolver().resolveRequestUri(authRequest)
+
             assertions(resolution)
         }
 
@@ -383,7 +361,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                 "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                 "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQuery" +
+                "&dcql_query=$dcqlQueryURLEncoded" +
                 "&client_metadata=$clientMetadataNoVpFormats"
 
         assertFailsWith<MissingFieldException> {
@@ -413,7 +391,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                 "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                 "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQuery" +
+                "&dcql_query=$dcqlQueryURLEncoded" +
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
@@ -446,7 +424,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                 "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                 "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQuery" +
+                "&dcql_query=$dcqlQueryURLEncoded" +
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
@@ -468,7 +446,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                 "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                 "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQuery"
+                "&dcql_query=$dcqlQueryURLEncoded"
 
         val resolution = resolver().resolveRequestUri(authRequest)
         val request = resolution.assertIsSuccess()
@@ -498,7 +476,7 @@ class UnvalidatedRequestResolverTest {
                 "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                 "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                 "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQuery" +
+                "&dcql_query=$dcqlQueryURLEncoded" +
                 "&client_metadata=$clientMetadata"
 
         val resolution = resolver().resolveRequestUri(authRequest)
@@ -563,78 +541,6 @@ class UnvalidatedRequestResolverTest {
         assertNotNull(msoMdocFormat.deviceAuthAlgorithms)
         assertTrue { msoMdocFormat.issuerAuthAlgorithms.size == 1 }
         assertTrue { msoMdocFormat.issuerAuthAlgorithms.contains(CoseAlgorithm(-7)) }
-    }
-
-    private fun createSignedRequestJwt(
-        jwkSet: JWKSet,
-        jwtClaimsSet: JWTClaimsSet,
-        typ: JOSEObjectType?,
-    ): String {
-        val headerBuilder = JWSHeader.Builder(JWSAlgorithm.RS256)
-        headerBuilder.keyID(jwkSet.keys[0].keyID)
-        typ?.let {
-            headerBuilder.type(it)
-        }
-
-        val signedJWT = SignedJWT(headerBuilder.build(), jwtClaimsSet)
-
-        val signer = DefaultJWSSignerFactory().createJWSSigner(jwkSet.keys[0], JWSAlgorithm.RS256)
-        signedJWT.sign(signer)
-
-        return signedJWT.serialize()
-    }
-
-    private fun createSignedRequestJwt(
-        keyStore: KeyStore,
-        jwtClaimsSet: JWTClaimsSet,
-        typ: JOSEObjectType?,
-    ): String {
-        val chain = keyStore.getCertificateChain("verifierexample")
-        val base64EncodedChain = chain.map {
-            com.nimbusds.jose.util.Base64.encode(it.encoded)
-        }
-        val headerBuilder = JWSHeader.Builder(JWSAlgorithm.RS256)
-        headerBuilder.x509CertChain(base64EncodedChain.toMutableList())
-        typ.let {
-            headerBuilder.type(it)
-        }
-
-        val signedJWT = SignedJWT(headerBuilder.build(), jwtClaimsSet)
-
-        val jwkSet = JWKSet.load(keyStore) { _ -> "12345".toCharArray() }
-        val signingKey = jwkSet.filter(
-            JWKMatcher.Builder()
-                .keyType(KeyType.RSA)
-                .keyID("verifierexample")
-                .build(),
-        ).keys[0]
-
-        val signer = DefaultJWSSignerFactory().createJWSSigner(signingKey)
-        signedJWT.sign(signer)
-
-        return signedJWT.serialize()
-    }
-
-    private fun jwtClaimsSet(
-        clientId: String,
-        responseUri: String,
-        clientMetadata: UnvalidatedClientMetaData,
-    ): JWTClaimsSet {
-        val query = Json.decodeFromStream<DCQL>(load("dcql/eudi_msomdoc_pid_dcql_query.json"))
-
-        return with(JWTClaimsSet.Builder()) {
-            audience("https://self-issued.me/v2")
-            issueTime(Date())
-            claim("client_id", clientId)
-            claim("response_uri", responseUri)
-            claim("response_type", "vp_token")
-            claim("nonce", "nonce")
-            claim("response_mode", "direct_post")
-            claim(OpenId4VPSpec.DCQL_QUERY, Jackson.toJsonObject(query))
-            claim("state", "638JwH0b2jrhGlAZQVa50KysVazkI-YpiFcLj2DLMalJpZK6XC22vAsPqXkpwAwXzfYpK-WLc3GhHYK8lbT6rw")
-            claim("client_metadata", Jackson.toJsonObject(clientMetadata))
-            build()
-        }
     }
 
     @Test
@@ -751,26 +657,6 @@ class UnvalidatedRequestResolverTest {
                  }    
                }
             """.trimIndent()
-
-        private fun jwtClaimsSetDCApiRequest(
-            clientId: String? = null,
-            clientMetadata: UnvalidatedClientMetaData? = null,
-            responseMode: String? = "dc_api",
-            expectedOrigins: List<String>? = null,
-        ): JWTClaimsSet =
-            with(JWTClaimsSet.Builder()) {
-                audience("https://self-issued.me/v2")
-                issueTime(Date())
-                clientId?.let { claim("client_id", clientId) }
-                claim("response_type", "vp_token")
-                claim("nonce", "nonce")
-                claim("response_mode", responseMode)
-                claim("dcql_query", Jackson.toJsonObject(Json.decodeFromString<JsonObject>(dcqlQuery)))
-                claim("state", "638JwH0b2jrhGlAZQVa50KysVazkI-YpiFcLj2DLMalJpZK6XC22vAsPqXkpwAwXzfYpK-WLc3GhHYK8lbT6rw")
-                clientMetadata?.let { claim("client_metadata", Jackson.toJsonObject(clientMetadata)) }
-                expectedOrigins?.let { claim("expected_origins", expectedOrigins) }
-                build()
-            }
 
         @Test
         fun `nonce is mandatory to exist`() = runTest {
@@ -935,19 +821,13 @@ class UnvalidatedRequestResolverTest {
 
         @Test
         fun `when request is of JWS compact serialization form, it is parsed properly`() = runTest {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(
-                load("certificates/certificates.jks"),
-                "12345".toCharArray(),
-            )
             val clientId = "x509_san_dns:verifier.example.gr"
-            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+            val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
                 responseMode = "dc_api",
+                dcqlQuery = dcqlQuery,
                 expectedOrigins = listOf("test_origin"),
-            )
-            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
-            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+            ).signWithKeystore()
 
             val requestData = buildJsonObject {
                 put("request", signedJwt)
@@ -963,19 +843,13 @@ class UnvalidatedRequestResolverTest {
 
         @Test
         fun `if request is signed and expected_origins is missing, fail resolution with MissingExpectedOrigins`() = runTest {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(
-                load("certificates/certificates.jks"),
-                "12345".toCharArray(),
-            )
             val clientId = "x509_san_dns:verifier.example.gr"
             // Request with no expected_origins
-            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+            val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
                 responseMode = "dc_api",
-            )
-            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
-            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+                dcqlQuery = dcqlQuery,
+            ).signWithKeystore()
 
             val requestData = buildJsonObject {
                 put("request", signedJwt)
@@ -991,20 +865,14 @@ class UnvalidatedRequestResolverTest {
 
         @Test
         fun `if request is signed, caller info's origin must be one of the expected_origins`() = runTest {
-            val keyStore = KeyStore.getInstance("JKS")
-            keyStore.load(
-                load("certificates/certificates.jks"),
-                "12345".toCharArray(),
-            )
             val clientId = "x509_san_dns:verifier.example.gr"
             // Request with no expected_origins
-            val jwtClaimsSet = jwtClaimsSetDCApiRequest(
+            val signedJwt = unvalidatedRequestOverDCApi(
                 clientId = clientId,
                 responseMode = "dc_api",
+                dcqlQuery = dcqlQuery,
                 expectedOrigins = listOf("origin_1", "origin_2"),
-            )
-            val typ = JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)
-            val signedJwt = createSignedRequestJwt(keyStore, jwtClaimsSet, typ)
+            ).signWithKeystore()
 
             val requestData = buildJsonObject {
                 put("request", signedJwt)
@@ -1460,11 +1328,4 @@ class UnvalidatedRequestResolverTest {
             }
         }
     }
-}
-
-object Jackson {
-    @PublishedApi
-    internal val objectMapper: ObjectMapper by lazy { ObjectMapper() }
-
-    inline fun <reified T> toJsonObject(value: T): Any = objectMapper.readValue<Any>(Json.encodeToString(value))
 }
