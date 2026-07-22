@@ -29,7 +29,6 @@ import kotlin.test.*
 class RegistrationCertificatePolicyEvaluatorTest {
 
     private val wrprcValid = load("certificates/wrprc.txt")!!.bufferedReader().readText()
-
     private val wrprcUnsigned = load("certificates/wrprc_unsigned.txt")!!.bufferedReader().readText()
 
     private val dummyCert: X509Certificate by lazy {

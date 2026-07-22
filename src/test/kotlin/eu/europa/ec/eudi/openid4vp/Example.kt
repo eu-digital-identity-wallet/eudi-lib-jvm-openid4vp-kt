@@ -288,6 +288,7 @@ private class Wallet(
                     request.responseEncryptionSpecification,
                     request.responseMode,
                 )
+
                 "dc+sd-jwt" -> prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
                 else -> error("unsupported format $format")
             }

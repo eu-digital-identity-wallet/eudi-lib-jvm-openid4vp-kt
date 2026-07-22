@@ -95,7 +95,7 @@ sealed interface OpenId4Vp {
                 val authorization = policyEvaluator.evaluate(this)
                 when (authorization) {
                     is RegistrationCertificatePolicy.Authorization.Granted ->
-                        Resolution.Success(this, authorization.warnings ?: emptyList())
+                        Resolution.Success(this, authorization.warnings)
 
                     is RegistrationCertificatePolicy.Authorization.NotGranted ->
                         Resolution.Invalid(

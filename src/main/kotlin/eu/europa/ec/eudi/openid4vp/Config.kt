@@ -425,7 +425,7 @@ data class RegistrationCertificatePolicy(
     }
 
     sealed interface Authorization {
-        data class Granted(val warnings: List<PolicyViolation>? = null) : Authorization
+        data class Granted(val warnings: List<PolicyViolation> = emptyList()) : Authorization
         data class NotGranted(val error: PolicyViolation) : Authorization
     }
 

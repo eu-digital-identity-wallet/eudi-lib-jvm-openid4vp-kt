@@ -550,7 +550,7 @@ sealed interface Resolution {
 }
 
 suspend fun Resolution.andThen(
-    f: suspend (ResolvedRequestObject, List<RegistrationCertificatePolicy.PolicyViolation>?) -> Resolution,
+    f: suspend (ResolvedRequestObject, List<RegistrationCertificatePolicy.PolicyViolation>) -> Resolution,
 ): Resolution =
     when (this) {
         is Resolution.Success -> f(requestObject, policyViolationWarnings)
