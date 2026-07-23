@@ -19,7 +19,6 @@ import com.nimbusds.jose.JWSAlgorithm
 import eu.europa.ec.eudi.openid4vp.RegistrationCertificatePolicy.PolicyViolation
 import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
 import eu.europa.ec.eudi.openid4vp.internal.request.VerifierInfoTO
-import eu.europa.ec.eudi.openid4vp.internal.request.randomKey
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
@@ -29,7 +28,6 @@ import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 import org.junit.jupiter.api.*
-import java.io.InputStream
 import java.net.URLEncoder
 import java.time.Clock
 import kotlin.test.Test
@@ -406,9 +404,6 @@ internal fun VerifierInfo?.toVerifierInfoTO(): VerifierInfoTO? = this?.let { ver
     val value = Json.encodeToString(verifierInfo.attestations)
     return VerifierInfoTO(Json.decodeFromString(value))
 }
-
-internal fun load(f: String): InputStream =
-    WrprcTest::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
 
 private fun OpenId4VPConfig.withWrprcPolicy(policy: RegistrationCertificatePolicy): OpenId4VPConfig =
     copy(registrationCertificatePolicy = policy)

@@ -49,7 +49,6 @@ import kotlinx.serialization.json.put
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.assertDoesNotThrow
-import java.io.InputStream
 import java.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -162,7 +161,7 @@ class AuthorizationResponseDispatcherTest {
                                     call.request.headers["Content-Type"],
                                 )
                                 assertEquals(state, stateParam)
-                                assertEquals(vpTokenTxt, "{\"query_0\":[\"vp_token\"]}")
+                                assertEquals("{\"query_0\":[\"vp_token\"]}", vpTokenTxt)
 
                                 call.respond(buildJsonObject { put("redirect_uri", "https://foo") })
                             }
@@ -334,7 +333,7 @@ class AuthorizationResponseDispatcherTest {
 
                     val dispatcher = DefaultDispatcherOverHttp(managedHttpClient)
                     val outcome = dispatcher.dispatchError(
-                        RequestValidationError.MissingResponseType,
+                        MissingResponseType,
                         errorDispatchDetails,
                         EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
                     )
@@ -483,7 +482,4 @@ class AuthorizationResponseDispatcherTest {
             return encryptedJwt.jwtClaimsSet.claims
         }
     }
-
-    private fun load(f: String): InputStream? =
-        AuthorizationResponseDispatcherTest::class.java.classLoader.getResourceAsStream(f)
 }

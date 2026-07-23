@@ -22,7 +22,6 @@ import com.nimbusds.jose.jwk.ECKey
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.ECKeyGenerator
-import com.nimbusds.oauth2.sdk.id.State
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.dcql.*
 import eu.europa.ec.eudi.openid4vp.internal.request.ClientMetaDataValidator
@@ -91,10 +90,6 @@ class AuthorizationResponseBuilderTest {
 
         private fun JWKSet.toJsonObject(publicKeysOnly: Boolean = true): JsonObject =
             Json.parseToJsonElement(this.toString(publicKeysOnly)).jsonObject
-    }
-
-    private fun genState(): String {
-        return State().value
     }
 
     @Test

@@ -20,69 +20,36 @@ import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
-import com.nimbusds.oauth2.sdk.id.State
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.MissingExpectedOrigins
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.UnexpectedOrigin
-import eu.europa.ec.eudi.openid4vp.dcql.QueryId
-import eu.europa.ec.eudi.openid4vp.internal.base64UrlNoPadding
 import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
-import eu.europa.ec.eudi.openid4vp.internal.request.*
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverDCApi
+import eu.europa.ec.eudi.openid4vp.internal.request.DefaultRequestResolverOverHttp
+import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedClientMetaData
+import eu.europa.ec.eudi.openid4vp.internal.request.UnvalidatedRequestObject
 import io.ktor.client.*
 import io.ktor.client.plugins.contentnegotiation.*
 import io.ktor.serialization.kotlinx.json.*
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.MissingFieldException
-import kotlinx.serialization.SerializationException
 import kotlinx.serialization.json.*
-import org.apache.http.NameValuePair
-import org.apache.http.client.utils.URIBuilder
-import org.apache.http.message.BasicNameValuePair
 import org.junit.jupiter.api.AfterAll
 import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.TestInstance
-import java.io.InputStream
 import java.net.URLEncoder
-import java.security.cert.X509Certificate
 import java.time.Clock
 import java.util.*
-import kotlin.collections.List
-import kotlin.collections.emptyMap
 import kotlin.collections.filter
-import kotlin.collections.first
 import kotlin.collections.forEach
-import kotlin.collections.indices
 import kotlin.collections.listOf
 import kotlin.collections.setOf
 import kotlin.test.*
 import kotlin.test.assertNotNull
 
-@TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class UnvalidatedRequestResolverTest {
-
-    private val json: Json by lazy { Json { ignoreUnknownKeys = true } }
-
-    private lateinit var httpClient: HttpClient
-
-    @BeforeAll
-    fun setup() {
-        httpClient = HttpClient {
-            install(ContentNegotiation) {
-                json(json)
-            }
-            expectSuccess = true
-        }
-    }
-
-    @AfterAll
-    fun teardown() {
-        httpClient.close()
-    }
-
-    private fun resolver() = DefaultRequestResolverOverHttp(walletConfig, httpClient)
 
     private val dcqlQuery = readFileAsText("dcql/basic_example.json")
         .replace("\r\n", "")
@@ -182,197 +149,218 @@ class UnvalidatedRequestResolverTest {
             URLEncoder.encode(it, "UTF-8")
         }
 
-    private fun genState(): String {
-        return State().value
-    }
+    @DisplayName("when authorization request comes through redirects")
+    @Nested
+    @TestInstance(TestInstance.Lifecycle.PER_CLASS)
+    inner class RequestResolutionOverRedirectsTest {
 
-    @Test
-    fun `vp token auth request`() = runTest {
-        suspend fun test(state: String? = null) {
+        private lateinit var httpClient: HttpClient
+
+        @BeforeAll
+        fun setup() {
+            httpClient = HttpClient {
+                install(ContentNegotiation) {
+                    json(json)
+                }
+                expectSuccess = true
+            }
+        }
+
+        @AfterAll
+        fun teardown() {
+            httpClient.close()
+        }
+
+        private fun resolver() = DefaultRequestResolverOverHttp(walletConfig, httpClient)
+
+        @Test
+        fun `vp token auth request`() = runTest {
+            suspend fun test(state: String? = null) {
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_token" +
+                        "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&nonce=n-0S6_WzA2Mj" +
+                        (state?.let { "&state=$it" } ?: "") +
+                        "&dcql_query=$dcqlQueryURLEncoded" +
+                        "&client_metadata=$clientMetadataJwksInline"
+
+                val resolution = resolver().resolveRequestUri(authRequest)
+                resolution.assertIsSuccess()
+            }
+
+            test(genState())
+            test()
+        }
+
+        @Test
+        fun `if response_mode does not require encryption, related client_metadata are not mandatory to be provided`() = runTest {
+            suspend fun test(state: String? = null) {
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_token" +
+                        "&response_mode=direct_post" +
+                        "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&response_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&nonce=n-0S6_WzA2Mj" +
+                        (state?.let { "&state=$it" } ?: "") +
+                        "&dcql_query=$dcqlQueryURLEncoded"
+
+                val resolution = resolver().resolveRequestUri(authRequest)
+
+                resolution.assertIsSuccess()
+            }
+
+            test(genState())
+            test()
+        }
+
+        @Test
+        fun `JAR auth request, request passed as JWT, verified with pre-registered client prefix`() = runBlocking {
+            suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
+                val jwkSet = JWKSet(signingKey)
+                val unvalidatedClientMetaData = UnvalidatedClientMetaData(
+                    jwks = Json.parseToJsonElement(jwkSet.toPublicJWKSet().toString()).jsonObject,
+                    vpFormatsSupported = VpFormatsSupported(
+                        msoMdoc =
+                            VpFormatsSupported.MsoMdoc(
+                                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            ),
+                    ),
+                )
+                val signedJwt = unvalidatedRequestOverRedirects(
+                    clientId = "Verifier",
+                    dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                    responseUri = "https://eudi.netcompany-intrasoft.com/wallet/direct_post",
+                    clientMetadata = unvalidatedClientMetaData,
+                ).signWithJwkSet(jwkSet, typ)
+
+                val authRequest = "http://localhost:8080/public_url?client_id=Verifier&request=$signedJwt"
+                val resolution = resolver().resolveRequestUri(authRequest)
+
+                assertions(resolution)
+            }
+
+            test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
+                it.assertIsSuccess()
+            }
+
+            listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
+                .forEach { type ->
+                    test(type) {
+                        it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
+                    }
+                }
+        }
+
+        @Test
+        fun `JAR auth request, request passed as JWT, verified with x509_san_dns prefix`() = runTest {
+            suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
+                val clientId = "x509_san_dns:verifier.example.gr"
+                val signedJwt = unvalidatedRequestOverRedirects(
+                    clientId = clientId,
+                    responseUri = "https://verifier.example.gr/wallet/direct_post",
+                    dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                    clientMetadata = UnvalidatedClientMetaData(
+                        jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
+                        vpFormatsSupported = VpFormatsSupported(
+                            msoMdoc =
+                                VpFormatsSupported.MsoMdoc(
+                                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                ),
+                        ),
+                    ),
+                ).signWithKeystore(typ)
+
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientId&request=$signedJwt"
+
+                val resolution = resolver().resolveRequestUri(authRequest)
+                assertions(resolution)
+            }
+
+            test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
+                it.assertIsSuccess()
+            }
+
+            listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
+                .forEach { type ->
+                    test(type) {
+                        it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
+                    }
+                }
+        }
+
+        @Test
+        fun `JAR auth request, request passed as JWT, verified with x509_hash prefix`() = runTest {
+            suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
+                val signedJwt = unvalidatedRequestOverRedirects(
+                    clientId = clientId,
+                    responseUri = "https://verifier.example.gr",
+                    dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                    clientMetadata = UnvalidatedClientMetaData(
+                        jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
+                        vpFormatsSupported = VpFormatsSupported(
+                            msoMdoc =
+                                VpFormatsSupported.MsoMdoc(
+                                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                ),
+                        ),
+                    ),
+                ).signWithKeystore(typ)
+
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+                val resolution = resolver().resolveRequestUri(authRequest)
+
+                assertions(resolution)
+            }
+
+            test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
+                it.assertIsSuccess()
+            }
+
+            listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
+                .forEach { type ->
+                    test(type) {
+                        it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
+                    }
+                }
+        }
+
+        @Test
+        fun `invalid client metadata - no vp_formats`() = runTest {
+            val clientMetadataNoVpFormats =
+                """ {
+             "jwks": $jwkSetJO
+            } 
+                """.trimIndent().let {
+                    URLEncoder.encode(it, "UTF-8")
+                }
+
             val authRequest =
                 "https://client.example.org/universal-link?" +
                     "response_type=vp_token" +
                     "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
                     "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
                     "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
                     "&dcql_query=$dcqlQueryURLEncoded" +
-                    "&client_metadata=$clientMetadataJwksInline"
+                    "&client_metadata=$clientMetadataNoVpFormats"
 
-            val resolution = resolver().resolveRequestUri(authRequest)
-            resolution.assertIsSuccess()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
-    fun `if response_mode does not require encryption, related client_metadata are not mandatory to be provided`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=vp_token" +
-                    "&response_mode=direct_post" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&response_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&dcql_query=$dcqlQueryURLEncoded"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            resolution.assertIsSuccess()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @Test
-    fun `JAR auth request, request passed as JWT, verified with pre-registered client prefix`() = runBlocking {
-        suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
-            val jwkSet = JWKSet(signingKey)
-            val unvalidatedClientMetaData = UnvalidatedClientMetaData(
-                jwks = Json.parseToJsonElement(jwkSet.toPublicJWKSet().toString()).jsonObject,
-                vpFormatsSupported = VpFormatsSupported(
-                    msoMdoc =
-                        VpFormatsSupported.MsoMdoc(
-                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        ),
-                ),
-            )
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = "Verifier",
-                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
-                responseUri = "https://eudi.netcompany-intrasoft.com/wallet/direct_post",
-                clientMetadata = unvalidatedClientMetaData,
-            ).signWithJwkSet(jwkSet, typ)
-
-            val authRequest = "http://localhost:8080/public_url?client_id=Verifier&request=$signedJwt"
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            assertions(resolution)
-        }
-
-        test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.assertIsSuccess()
-        }
-
-        listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
-            .forEach { type ->
-                test(type) {
-                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
-                }
+            assertFailsWith<MissingFieldException> {
+                resolver().resolveRequestUri(authRequest)
             }
-    }
-
-    @Test
-    fun `JAR auth request, request passed as JWT, verified with x509_san_dns prefix`() = runTest {
-        suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
-            val clientId = "x509_san_dns:verifier.example.gr"
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                responseUri = "https://verifier.example.gr/wallet/direct_post",
-                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
-                clientMetadata = UnvalidatedClientMetaData(
-                    jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
-                    vpFormatsSupported = VpFormatsSupported(
-                        msoMdoc =
-                            VpFormatsSupported.MsoMdoc(
-                                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                            ),
-                    ),
-                ),
-            ).signWithKeystore(typ)
-
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientId&request=$signedJwt"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-            assertions(resolution)
         }
 
-        test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.assertIsSuccess()
-        }
-
-        listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
-            .forEach { type ->
-                test(type) {
-                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
-                }
-            }
-    }
-
-    @Test
-    fun `JAR auth request, request passed as JWT, verified with x509_hash prefix`() = runTest {
-        suspend fun test(typ: JOSEObjectType? = null, assertions: (Resolution) -> Unit) {
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                responseUri = "https://verifier.example.gr",
-                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
-                clientMetadata = UnvalidatedClientMetaData(
-                    jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
-                    vpFormatsSupported = VpFormatsSupported(
-                        msoMdoc =
-                            VpFormatsSupported.MsoMdoc(
-                                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                            ),
-                    ),
-                ),
-            ).signWithKeystore(typ)
-
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            assertions(resolution)
-        }
-
-        test(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE)) {
-            it.assertIsSuccess()
-        }
-
-        listOf(null, JOSEObjectType(""), JOSEObjectType("jwt"))
-            .forEach { type ->
-                test(type) {
-                    it.assertIsInvalid<RequestValidationError.InvalidJarJwt>()
-                }
-            }
-    }
-
-    @Test
-    fun `invalid client metadata - no vp_formats`() = runTest {
-        val clientMetadataNoVpFormats =
-            """ {
-             "jwks": $jwkSetJO
-            } 
-            """.trimIndent().let {
-                URLEncoder.encode(it, "UTF-8")
-            }
-
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQueryURLEncoded" +
-                "&client_metadata=$clientMetadataNoVpFormats"
-
-        assertFailsWith<MissingFieldException> {
-            resolver().resolveRequestUri(authRequest)
-        }
-    }
-
-    @Test
-    fun `if no common ground on wallet and verifier vp_formats resolution fails with ClientVpFormatsNotSupportedFromWallet`() = runTest {
-        val clientMetadata =
-            """ {
+        @Test
+        fun `if no common ground on wallet and verifier vp_formats resolution fails with ClientVpFormatsNotSupportedFromWallet`() =
+            runTest {
+                val clientMetadata =
+                    """ {
                  "jwks": $jwkSetJO,
                  "vp_formats_supported": {
                      "dc+sd-jwt": {
@@ -381,27 +369,27 @@ class UnvalidatedRequestResolverTest {
                      }
                  }    
                }
-            """.trimIndent().let {
-                URLEncoder.encode(it, "UTF-8")
+                    """.trimIndent().let {
+                        URLEncoder.encode(it, "UTF-8")
+                    }
+
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_token" +
+                        "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&nonce=n-0S6_WzA2Mj" +
+                        "&dcql_query=$dcqlQueryURLEncoded" +
+                        "&client_metadata=$clientMetadata"
+
+                val resolution = resolver().resolveRequestUri(authRequest)
+                resolution.assertIsInvalid<ResolutionError.ClientVpFormatsNotSupportedFromWallet>()
             }
 
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQueryURLEncoded" +
-                "&client_metadata=$clientMetadata"
-
-        val resolution = resolver().resolveRequestUri(authRequest)
-        resolution.assertIsInvalid<ResolutionError.ClientVpFormatsNotSupportedFromWallet>()
-    }
-
-    @Test
-    fun `if no common ground between wallet and verifier on non query requested vp_formats resolution succeeds`() = runTest {
-        val clientMetadata =
-            """ {
+        @Test
+        fun `if no common ground between wallet and verifier on non query requested vp_formats resolution succeeds`() = runTest {
+            val clientMetadata =
+                """ {
                  "jwks": $jwkSetJO,
                  "vp_formats_supported": {
                      "dc+sd-jwt": {
@@ -414,50 +402,50 @@ class UnvalidatedRequestResolverTest {
                      }
                  }    
                }
-            """.trimIndent().let {
-                URLEncoder.encode(it, "UTF-8")
-            }
+                """.trimIndent().let {
+                    URLEncoder.encode(it, "UTF-8")
+                }
 
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQueryURLEncoded" +
-                "&client_metadata=$clientMetadata"
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded" +
+                    "&client_metadata=$clientMetadata"
 
-        val resolution = resolver().resolveRequestUri(authRequest)
-        with(resolution.assertIsSuccess()) {
-            with(assertNotNull(vpFormatsSupported)) {
-                assertNotNull(sdJwtVc)
-                assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.sdJwtAlgorithms)
-                assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.kbJwtAlgorithms)
-                assertNull(msoMdoc)
+            val resolution = resolver().resolveRequestUri(authRequest)
+            with(resolution.assertIsSuccess()) {
+                with(assertNotNull(vpFormatsSupported)) {
+                    assertNotNull(sdJwtVc)
+                    assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.sdJwtAlgorithms)
+                    assertEquals(listOf(JWSAlgorithm.ES512), sdJwtVc.kbJwtAlgorithms)
+                    assertNull(msoMdoc)
+                }
             }
         }
-    }
 
-    @Test
-    fun `if no client metadata provided no vpFormats are included in the resolved authorization request`() = runTest {
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQueryURLEncoded"
+        @Test
+        fun `if no client metadata provided no vpFormats are included in the resolved authorization request`() = runTest {
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded"
 
-        val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.assertIsSuccess()
+            val resolution = resolver().resolveRequestUri(authRequest)
+            val request = resolution.assertIsSuccess()
 
-        assertNull(request.vpFormatsSupported)
-    }
+            assertNull(request.vpFormatsSupported)
+        }
 
-    @Test
-    fun `common ground on dc+sd-jwt vp_format includes only common algorithms`() = runTest {
-        val clientMetadata =
-            """ {
+        @Test
+        fun `common ground on dc+sd-jwt vp_format includes only common algorithms`() = runTest {
+            val clientMetadata =
+                """ {
                  "jwks": $jwkSetJO,
                  "vp_formats_supported": {
                      "dc+sd-jwt": {
@@ -466,47 +454,47 @@ class UnvalidatedRequestResolverTest {
                      }
                  }    
                }
-            """.trimIndent().let {
-                URLEncoder.encode(it, "UTF-8")
-            }
+                """.trimIndent().let {
+                    URLEncoder.encode(it, "UTF-8")
+                }
 
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$dcqlQueryURLEncoded" +
-                "&client_metadata=$clientMetadata"
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded" +
+                    "&client_metadata=$clientMetadata"
 
-        val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.assertIsSuccess()
-        val formats = request.vpFormatsSupported
-        val sdJwtFormat = assertNotNull(formats?.sdJwtVc)
+            val resolution = resolver().resolveRequestUri(authRequest)
+            val request = resolution.assertIsSuccess()
+            val formats = request.vpFormatsSupported
+            val sdJwtFormat = assertNotNull(formats?.sdJwtVc)
 
-        assertNotNull(sdJwtFormat.kbJwtAlgorithms)
-        assertTrue { sdJwtFormat.kbJwtAlgorithms.size == 2 }
-        assertTrue { sdJwtFormat.kbJwtAlgorithms.contains(JWSAlgorithm.ES512) }
-        assertTrue { sdJwtFormat.kbJwtAlgorithms.contains(JWSAlgorithm.RS256) }
+            assertNotNull(sdJwtFormat.kbJwtAlgorithms)
+            assertTrue { sdJwtFormat.kbJwtAlgorithms.size == 2 }
+            assertTrue { sdJwtFormat.kbJwtAlgorithms.contains(JWSAlgorithm.ES512) }
+            assertTrue { sdJwtFormat.kbJwtAlgorithms.contains(JWSAlgorithm.RS256) }
 
-        assertNotNull(sdJwtFormat.sdJwtAlgorithms)
-        assertTrue { sdJwtFormat.sdJwtAlgorithms.size == 3 }
-        assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.ES256) }
-        assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.ES512) }
-        assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.RS256) }
-    }
+            assertNotNull(sdJwtFormat.sdJwtAlgorithms)
+            assertTrue { sdJwtFormat.sdJwtAlgorithms.size == 3 }
+            assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.ES256) }
+            assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.ES512) }
+            assertTrue { sdJwtFormat.sdJwtAlgorithms.contains(JWSAlgorithm.RS256) }
+        }
 
-    @Test
-    fun `common ground on msoMdoc vp_format includes only common algorithms`() = runTest {
-        val multipleCredentialsDcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json")
-            .replace("\r\n", "")
-            .replace("\r", "")
-            .replace("\n", "")
-            .replace("  ", "")
-            .let { URLEncoder.encode(it, "UTF-8") }
+        @Test
+        fun `common ground on msoMdoc vp_format includes only common algorithms`() = runTest {
+            val multipleCredentialsDcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json")
+                .replace("\r\n", "")
+                .replace("\r", "")
+                .replace("\n", "")
+                .replace("  ", "")
+                .let { URLEncoder.encode(it, "UTF-8") }
 
-        val clientMetadata =
-            """ {
+            val clientMetadata =
+                """ {
                  "jwks": $jwkSetJO,
                  "vp_formats_supported": {
                      "mso_mdoc": {
@@ -515,134 +503,99 @@ class UnvalidatedRequestResolverTest {
                      }
                  }    
                }
-            """.trimIndent().let {
-                URLEncoder.encode(it, "UTF-8")
+                """.trimIndent().let {
+                    URLEncoder.encode(it, "UTF-8")
+                }
+
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$multipleCredentialsDcqlQuery" +
+                    "&client_metadata=$clientMetadata"
+
+            val resolution = resolver().resolveRequestUri(authRequest)
+            val request = resolution.assertIsSuccess()
+            val formats = request.vpFormatsSupported
+            assertNull(formats?.sdJwtVc)
+            val msoMdocFormat = assertNotNull(formats?.msoMdoc)
+
+            assertNotNull(msoMdocFormat.issuerAuthAlgorithms)
+            assertTrue { msoMdocFormat.issuerAuthAlgorithms.size == 1 }
+            assertTrue { msoMdocFormat.issuerAuthAlgorithms.contains(CoseAlgorithm(-7)) }
+
+            assertNotNull(msoMdocFormat.deviceAuthAlgorithms)
+            assertTrue { msoMdocFormat.issuerAuthAlgorithms.size == 1 }
+            assertTrue { msoMdocFormat.issuerAuthAlgorithms.contains(CoseAlgorithm(-7)) }
+        }
+
+        @Test
+        fun `response type provided is miss-spelled`() = runTest {
+            suspend fun test(state: String? = null) {
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_tokens" +
+                        "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&nonce=n-0S6_WzA2Mj" +
+                        (state?.let { "&state=$it" } ?: "") +
+                        "&client_metadata=$clientMetadataJwksInline"
+
+                val resolution = resolver().resolveRequestUri(authRequest)
+
+                resolution.assertIsInvalid<RequestValidationError.UnsupportedResponseType>()
             }
 
-        val authRequest =
-            "https://client.example.org/universal-link?" +
-                "response_type=vp_token" +
-                "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                "&nonce=n-0S6_WzA2Mj" +
-                "&dcql_query=$multipleCredentialsDcqlQuery" +
-                "&client_metadata=$clientMetadata"
-
-        val resolution = resolver().resolveRequestUri(authRequest)
-        val request = resolution.assertIsSuccess()
-        val formats = request.vpFormatsSupported
-        assertNull(formats?.sdJwtVc)
-        val msoMdocFormat = assertNotNull(formats?.msoMdoc)
-
-        assertNotNull(msoMdocFormat.issuerAuthAlgorithms)
-        assertTrue { msoMdocFormat.issuerAuthAlgorithms.size == 1 }
-        assertTrue { msoMdocFormat.issuerAuthAlgorithms.contains(CoseAlgorithm(-7)) }
-
-        assertNotNull(msoMdocFormat.deviceAuthAlgorithms)
-        assertTrue { msoMdocFormat.issuerAuthAlgorithms.size == 1 }
-        assertTrue { msoMdocFormat.issuerAuthAlgorithms.contains(CoseAlgorithm(-7)) }
-    }
-
-    @Test
-    fun `response type provided is miss-spelled`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=vp_tokens" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&client_metadata=$clientMetadataJwksInline"
-
-            val resolution = resolver().resolveRequestUri(authRequest)
-
-            resolution.assertIsInvalid<RequestValidationError.UnsupportedResponseType>()
+            test(genState())
+            test()
         }
 
-        test(genState())
-        test()
-    }
+        @Test
+        fun `nonce validation`() = runTest {
+            suspend fun test(state: String? = null) {
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_token" +
+                        "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                        (state?.let { "&state=$it" } ?: "") +
+                        "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&client_metadata=$clientMetadataJwksInline"
 
-    @Test
-    fun `nonce validation`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=vp_token" +
-                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&client_metadata=$clientMetadataJwksInline"
+                val resolution = resolver().resolveRequestUri(authRequest)
 
-            val resolution = resolver().resolveRequestUri(authRequest)
+                resolution.assertIsInvalid<RequestValidationError.MissingNonce>()
+            }
 
-            resolution.assertIsInvalid<RequestValidationError.MissingNonce>()
+            test(genState())
+            test()
         }
 
-        test(genState())
-        test()
-    }
+        @Test
+        fun `if client_id is missing reject the request`() = runTest {
+            suspend fun test(state: String? = null) {
+                val authRequest =
+                    "https://client.example.org/universal-link?" +
+                        "response_type=vp_token" +
+                        "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                        "&nonce=n-0S6_WzA2Mj" +
+                        (state?.let { "&state=$it" } ?: "") +
+                        "&client_metadata=$clientMetadataJwksInline"
 
-    @Test
-    fun `if client_id is missing reject the request`() = runTest {
-        suspend fun test(state: String? = null) {
-            val authRequest =
-                "https://client.example.org/universal-link?" +
-                    "response_type=vp_token" +
-                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
-                    "&nonce=n-0S6_WzA2Mj" +
-                    (state?.let { "&state=$it" } ?: "") +
-                    "&client_metadata=$clientMetadataJwksInline"
+                val resolution = resolver().resolveRequestUri(authRequest)
 
-            val resolution = resolver().resolveRequestUri(authRequest)
+                resolution.assertIsInvalid<RequestValidationError.MissingClientId>()
+            }
 
-            resolution.assertIsInvalid<RequestValidationError.MissingClientId>()
-        }
-
-        test(genState())
-        test()
-    }
-
-    @OptIn(ExperimentalSerializationApi::class)
-    fun readFileAsText(fileName: String): String {
-        return json.decodeFromStream<JsonObject>(load(fileName)).jsonObject.toString()
-    }
-
-    private fun validateChain(chain: List<X509Certificate>): Boolean {
-        return try {
-            for (i in chain.indices)
-                if (i > 0) chain[i - 1].verify(chain[i].publicKey)
-            true
-        } catch (_: Exception) {
-            false
+            test(genState())
+            test()
         }
     }
-
-    private fun load(f: String): InputStream =
-        UnvalidatedRequestResolverTest::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
-
-    private fun Resolution.assertIsSuccess(): ResolvedRequestObject =
-        when (this) {
-            is Resolution.Success -> requestObject
-            is Resolution.Invalid -> fail("Invalid resolution found while expected success\n$error")
-        }
-
-    private inline fun <reified T : AuthorizationRequestError> Resolution.assertIsInvalid(): T =
-        when (this) {
-            is Resolution.Invalid -> assertIs(error, "${T::class} error expected")
-            else -> fail("Success resolution found while expected Invalid")
-        }
 
     @DisplayName("when authorization request comes through DC API channel")
     @Nested
     inner class RequestResolutionOverDCApiTest {
-
-        private val dcqlQuery = readFileAsText("dcql/basic_example.json")
-            .replace("\r\n", "")
-            .replace("\r", "")
-            .replace("\n", "")
-            .replace("  ", "")
 
         private val resolver = DefaultRequestResolverOverDCApi(walletConfig)
 
@@ -963,369 +916,6 @@ class UnvalidatedRequestResolverTest {
             )
 
             resolution.assertIsInvalid<UnexpectedOrigin>()
-        }
-    }
-
-    @DisplayName("when using transaction_data")
-    @Nested
-    inner class TransactionDataTest {
-        private val queryWithSingleCredential = BasicNameValuePair("dcql_query", readFileAsText("dcql/basic_example.json"))
-        private val queryWithMultipleCredentials = BasicNameValuePair("dcql_query", readFileAsText("dcql/complex_example.json"))
-
-        private suspend fun testAndThen(
-            transactionData: JsonArray,
-            query: NameValuePair,
-            block: suspend (Resolution) -> Unit,
-        ) {
-            val state = genState()
-            val clientMetadata = buildJsonObject {
-                put("jwks", jwkSetJO)
-                put("vp_formats_supported", vpFormatsJO)
-            }
-            val authorizationUrl = URIBuilder("https://client.example.org/universal-link")
-                .addParameter("response_type", "vp_token")
-                .addParameter("client_id", "redirect_uri:https://client.example.org/cb")
-                .addParameter("redirect_uri", "https://client.example.org/cb")
-                .addParameter("nonce", "n-0S6_WzA2Mj")
-                .addParameter("state", state)
-                .addParameter(query.name, query.value)
-                .addParameter("client_metadata", clientMetadata.toString())
-                .addParameter("transaction_data", jsonSupport.encodeToString(transactionData))
-                .build()
-            val resolution = resolver().resolveRequestUri(authorizationUrl.toString())
-            block(resolution)
-        }
-
-        private suspend fun testAndThen(
-            transactionData: JsonObject,
-            query: NameValuePair,
-            block: suspend (Resolution) -> Unit,
-        ) {
-            testAndThen(
-                JsonArray(
-                    listOf(
-                        JsonPrimitive(
-                            base64UrlNoPadding.encode(jsonSupport.encodeToString(transactionData).encodeToByteArray()),
-                        ),
-                    ),
-                ),
-                query,
-                block,
-            )
-        }
-
-        @Test
-        fun `if transaction_data contains non base64url encoded values, resolution fails`() = runTest {
-            val transactionData = JsonArray(listOf(JsonPrimitive("invalid")))
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals("The pad bits must be zeros", cause.message)
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains non JsonObject values, resolution fails`() = runTest {
-            val transactionData = JsonArray(listOf(JsonPrimitive(base64UrlNoPadding.encode("foo".encodeToByteArray()))))
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<SerializationException>(error.cause)
-                assertEquals(
-                    "Unexpected JSON token at offset 0: Expected start of the object '{', but had 'f' instead at path: $\nJSON input: foo",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains no type, resolution fails`() = runTest {
-            val transactionData = JsonObject(emptyMap())
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Missing required property 'type'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains non-string type, resolution fails`() = runTest {
-            val transactionData = buildJsonObject {
-                put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, 10)
-            }
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Property 'type' is not a string'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains unsupported type, resolution fails`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("unsupported"),
-                listOf(QueryId("my_credential")),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Unsupported Transaction Data 'type': 'unsupported'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains no credential_ids, resolution fails`() = runTest {
-            val transactionData = buildJsonObject {
-                put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, "basic-transaction-data")
-            }
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Missing required property 'credential_ids'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains non-string credential_ids, resolution fails`() = runTest {
-            val transactionData = buildJsonObject {
-                put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, "basic-transaction-data")
-                putJsonArray("credential_ids") {
-                    add(10)
-                }
-            }
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Property 'credential_ids' is not an array or contains non string values",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains credential_ids that don't match inputdescriptor ids, resolution fails`() =
-            runTest {
-                val transactionData = TransactionData.sdJwtVc(
-                    TransactionDataType("basic-transaction-data"),
-                    listOf(QueryId("invalid-id")),
-                )
-                testAndThen(transactionData.json, queryWithSingleCredential) {
-                    val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                    val cause = assertIs<IllegalArgumentException>(error.cause)
-                    assertEquals(
-                        "Invalid Transaction Data 'credential_ids': '[invalid-id]'",
-                        cause.message,
-                    )
-                }
-            }
-
-        @Test
-        fun `if transaction_data contains credential_ids that don't match query ids, resolution fails`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("invalid-id")),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Invalid Transaction Data 'credential_ids': '[invalid-id]'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains credential_ids that have different format, resolution fails`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("my_credential_1"), QueryId("my_credential_2")),
-            )
-            testAndThen(transactionData.json, queryWithMultipleCredentials) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Transaction Data must refer to Credentials that use the same Format",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains non-list transaction_data_hashes_alg, resolution fails`() = runTest {
-            val transactionData = buildJsonObject {
-                put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, "basic-transaction-data")
-                putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
-                    add("my_credential")
-                }
-                put(OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS, "invalid")
-            }
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Property 'transaction_data_hashes_alg' is not an array or contains non string values",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains non-string transaction_data_hashes_alg, resolution fails`() = runTest {
-            val transactionData = buildJsonObject {
-                put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, "basic-transaction-data")
-                putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
-                    add("my_credential")
-                }
-                putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS) {
-                    add(15)
-                }
-            }
-            testAndThen(transactionData, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Property 'transaction_data_hashes_alg' is not an array or contains non string values",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data contains unsupported transaction_data_hashes_alg, resolution fails`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("my_credential")),
-                listOf(HashAlgorithm("sha-512")),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Unsupported Transaction Data 'transaction_data_hashes_alg': '[sha-512]'",
-                    cause.message,
-                )
-            }
-        }
-
-        @Test
-        fun `if transaction_data is valid, when using dcql, resolution succeeds`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("my_credential")),
-                listOf(HashAlgorithm.SHA_256),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.assertIsSuccess()
-                val resolvedTransactionData = run {
-                    val resolvedTransactionData = assertNotNull(request.transactionData)
-                    assertEquals(1, resolvedTransactionData.size)
-                    assertIs<TransactionData.SdJwtVc>(resolvedTransactionData.first())
-                }
-                assertEquals(TransactionDataType("basic-transaction-data"), resolvedTransactionData.type)
-                assertEquals(
-                    listOf(QueryId("my_credential")),
-                    resolvedTransactionData.credentialIds,
-                )
-                assertEquals(listOf(HashAlgorithm.SHA_256), resolvedTransactionData.hashAlgorithms)
-            }
-        }
-
-        @Test
-        fun `if transaction_data is valid, resolution succeeds`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("my_credential")),
-                listOf(HashAlgorithm.SHA_256),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.assertIsSuccess()
-                val resolvedTransactionData = run {
-                    val resolvedTransactionData = assertNotNull(request.transactionData)
-                    assertEquals(1, resolvedTransactionData.size)
-                    assertIs<TransactionData.SdJwtVc>(resolvedTransactionData.first())
-                }
-                assertEquals(TransactionDataType("basic-transaction-data"), resolvedTransactionData.type)
-                assertEquals(
-                    listOf(QueryId("my_credential")),
-                    resolvedTransactionData.credentialIds,
-                )
-                assertEquals(listOf(HashAlgorithm.SHA_256), resolvedTransactionData.hashAlgorithms)
-            }
-        }
-
-        @Test
-        fun `if transaction_data is valid, and contains no transaction_data_hashes_alg, resolution succeeds`() =
-            runTest {
-                val transactionData = TransactionData.sdJwtVc(
-                    TransactionDataType("basic-transaction-data"),
-                    listOf(QueryId("my_credential")),
-                )
-                testAndThen(transactionData.json, queryWithSingleCredential) {
-                    val request = it.assertIsSuccess()
-                    val resolvedTransactionData = run {
-                        val resolvedTransactionData = assertNotNull(request.transactionData)
-                        assertEquals(1, resolvedTransactionData.size)
-                        assertIs<TransactionData.SdJwtVc>(resolvedTransactionData.first())
-                    }
-                    assertEquals(TransactionDataType("basic-transaction-data"), resolvedTransactionData.type)
-                    assertEquals(
-                        listOf(QueryId("my_credential")),
-                        resolvedTransactionData.credentialIds,
-                    )
-                    assertEquals(listOf(HashAlgorithm.SHA_256), resolvedTransactionData.hashAlgorithmsOrDefault)
-                }
-            }
-
-        @Test
-        fun `if transaction_data is valid, and contains transaction_data_hashes_alg without sha-256, resolution succeeds`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId(("my_credential"))),
-                listOf(HashAlgorithm("sha-384")),
-            )
-            testAndThen(transactionData.json, queryWithSingleCredential) {
-                val request = it.assertIsSuccess()
-                val resolvedTransactionData = run {
-                    val resolvedTransactionData = assertNotNull(request.transactionData)
-                    assertEquals(1, resolvedTransactionData.size)
-                    assertIs<TransactionData.SdJwtVc>(resolvedTransactionData.first())
-                }
-                assertEquals(TransactionDataType("basic-transaction-data"), resolvedTransactionData.type)
-                assertEquals(
-                    listOf(QueryId("my_credential")),
-                    resolvedTransactionData.credentialIds,
-                )
-                assertEquals(listOf(HashAlgorithm("sha-384")), resolvedTransactionData.hashAlgorithms)
-            }
-        }
-
-        @Test
-        fun `if transaction_data format is not supported, resolution fails`() = runTest {
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("basic-transaction-data"),
-                listOf(QueryId("my_credential_2")),
-            )
-            testAndThen(transactionData.json, queryWithMultipleCredentials) {
-                val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
-                val cause = assertIs<IllegalArgumentException>(error.cause)
-                assertEquals(
-                    "Unsupported Transaction Data Format 'mso_mdoc'",
-                    cause.message,
-                )
-            }
         }
     }
 }

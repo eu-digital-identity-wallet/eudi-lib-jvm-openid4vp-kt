@@ -26,7 +26,6 @@ import com.nimbusds.jose.jwk.gen.ECKeyGenerator
 import com.nimbusds.jose.util.Base64URL
 import com.nimbusds.jwt.EncryptedJWT
 import com.nimbusds.jwt.JWTClaimsSet
-import com.nimbusds.oauth2.sdk.id.State
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.MissingNonce
 import eu.europa.ec.eudi.openid4vp.dcql.*
@@ -484,34 +483,6 @@ class DefaultDispatcherTest {
                     QueryId("my_credential") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
                 ),
             )
-
-        private fun dcqlVpTokenWithJsonPresentation(): VerifiablePresentations =
-            VerifiablePresentations(
-                mapOf(
-                    QueryId("my_credential") to listOf(
-                        VerifiablePresentation.JsonObj(
-                            buildJsonObject {
-                                put("claimString", JsonPrimitive("claim1_value"))
-                                put(
-                                    "claimArray",
-                                    buildJsonArray {
-                                        add(JsonPrimitive("array_value_1"))
-                                        add(JsonPrimitive("array_value_2"))
-                                        add(JsonPrimitive("array_value_3"))
-                                    },
-                                )
-                                put(
-                                    "claimObject",
-                                    buildJsonObject {
-                                        put("child_json_obj_1", JsonPrimitive("val1"))
-                                        put("child_json_obj_2", JsonPrimitive("val2"))
-                                    },
-                                )
-                            },
-                        ),
-                    ),
-                ),
-            )
     }
 
     @Nested
@@ -961,7 +932,6 @@ class DefaultDispatcherTest {
     }
 }
 
-private fun genState(): String = State().value
 private fun JWTClaimsSet.vpTokenClaim(): JsonElement? =
     Json.parseToJsonElement(toString()).jsonObject["vp_token"]
 

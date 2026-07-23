@@ -23,6 +23,7 @@ import com.nimbusds.jose.crypto.factories.DefaultJWSVerifierFactory
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jwt.JWTClaimsSet
 import com.nimbusds.jwt.SignedJWT
+import eu.europa.ec.eudi.openid4vp.randomKey
 import java.net.URI
 import java.time.Clock
 import java.time.Instant
