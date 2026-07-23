@@ -15,12 +15,12 @@
  */
 package eu.europa.ec.eudi.openid4vp.internal.request
 
-import com.nimbusds.jose.*
-import com.nimbusds.jose.crypto.factories.DefaultJWSSignerFactory
-import com.nimbusds.jose.jwk.*
-import com.nimbusds.jose.jwk.gen.ECKeyGenerator
+import com.nimbusds.jose.JOSEException
+import com.nimbusds.jose.JWSAlgorithm
+import com.nimbusds.jose.JWSHeader
+import com.nimbusds.jose.JWSVerifier
+import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.util.Base64URL
-import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
 import eu.europa.ec.eudi.openid4vp.internal.DID
@@ -44,13 +44,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -82,13 +80,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.RedirectUri,
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -148,13 +144,11 @@ class ClientAuthenticatorOverHTTPTest {
                 SupportedClientIdPrefix.RedirectUri,
                 SupportedClientIdPrefix.Preregistered(preRegisteredClient, preRegisteredClientFooBar),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -200,13 +194,11 @@ class ClientAuthenticatorOverHTTPTest {
                     algAndKey.second.toPublicKey()
                 },
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
         )
@@ -311,13 +303,11 @@ class ClientAuthenticatorOverHTTPTest {
             supportedClientIdPrefixes = listOf(
                 SupportedClientIdPrefix.VerifierAttestation(AttestationIssuer.verifier),
             ),
-            vpConfiguration = VPConfiguration(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    ),
+            vpFormatsSupported = VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
             clock = Clock.systemDefaultZone(),
@@ -415,13 +405,11 @@ class RequestAuthenticatorOverDCApiTest {
     private val didSupportedScheme = SupportedClientIdPrefix.DecentralizedIdentifier({ _ -> didAlgAndKey.second.toPublicKey() })
 
     private val cfg = OpenId4VPConfig(
-        vpConfiguration = VPConfiguration(
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc.HAIP,
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
+        vpFormatsSupported = VpFormatsSupported(
+            VpFormatsSupported.SdJwtVc.HAIP,
+            VpFormatsSupported.MsoMdoc(
+                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
             ),
         ),
         supportedClientIdPrefixes = listOf(x509SanDnsSupportedPrefix, didSupportedScheme),
@@ -513,44 +501,4 @@ class RequestAuthenticatorOverDCApiTest {
             assertNotNull(signature2.protected)
         }
     }
-}
-//
-// Support
-//
-
-fun randomKey(): Pair<JWSAlgorithm, ECKey> =
-    JWSAlgorithm.ES256 to ECKeyGenerator(Curve.P_256).keyUse(KeyUse.SIGNATURE).generate()
-
-private inline fun <reified E : AuthorizationRequestError> assertFailsWithError(block: () -> Unit): E {
-    val exception = assertThrows<AuthorizationRequestException>(block)
-    return assertIs<E>(exception.error)
-}
-
-private fun UnvalidatedRequestObject.unsigned(): ReceivedRequest.Unsigned =
-    ReceivedRequest.Unsigned(this)
-
-private fun UnvalidatedRequestObject.signedWithAttestation(
-    alg: JWSAlgorithm,
-    key: JWK,
-    attestation: SignedJWT,
-): ReceivedRequest.Signed = signed(alg, key) {
-    this.customParam("jwt", attestation.serialize())
-}
-
-private fun UnvalidatedRequestObject.signed(
-    alg: JWSAlgorithm,
-    key: JWK,
-    headerCustomization: (JWSHeader.Builder).() -> Unit = {},
-): ReceivedRequest.Signed {
-    val header = with(JWSHeader.Builder(alg)) {
-        type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
-        headerCustomization()
-        build()
-    }
-    val claimsSet = toJWTClaimSet()
-    val jwt = SignedJWT(header, claimsSet).apply {
-        val signer = DefaultJWSSignerFactory().createJWSSigner(key, alg)
-        sign(signer)
-    }
-    return ReceivedRequest.Signed(jwt)
 }

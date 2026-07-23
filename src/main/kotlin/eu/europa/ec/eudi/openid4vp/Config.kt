@@ -23,9 +23,9 @@ import com.nimbusds.jose.crypto.ECDHDecrypter
 import com.nimbusds.jose.jwk.Curve
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.oauth2.sdk.id.Issuer
-import eu.europa.ec.eudi.openid4vp.OpenId4VPConfig.Companion.SelfIssued
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
+import kotlinx.serialization.json.JsonObject
 import java.net.URI
 import java.security.PublicKey
 import java.security.cert.X509Certificate
@@ -56,7 +56,7 @@ data class PreregisteredClient(
 }
 
 fun interface X509CertificateTrust {
-    fun isTrusted(chain: List<X509Certificate>): Boolean
+    suspend fun isTrusted(chain: List<X509Certificate>): Boolean
 }
 
 fun interface LookupPublicKeyByDIDUrl {
@@ -179,6 +179,7 @@ sealed interface SupportedTransactionDataType {
  * @param vpFormatsSupported The formats the wallet supports
  * @param supportedTransactionDataTypes the types of Transaction Data that are supported by the wallet
  */
+@Deprecated("Merged to top level OpenId4VPConfig")
 data class VPConfiguration(
     val knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
     val vpFormatsSupported: VpFormatsSupported,
@@ -233,6 +234,7 @@ sealed interface NonceOption {
         init {
             require(byteLength >= MINIMUM_NONCE_LENGTH) { "Byte length should be at least $MINIMUM_NONCE_LENGTH" }
         }
+
         companion object {
             const val MINIMUM_NONCE_LENGTH: Int = 32
         }
@@ -402,6 +404,41 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
 }
 
 /**
+ * Represents a policy to be applied on a registration certificate in the context of X.509-based trust.
+ *
+ * @property trust Defines the trust evaluation mechanism for an X.509 certificate chain,
+ *                 determining whether a given chain of X.509 certificates is trusted.
+ * @property apply A function that evaluates the policy based on inputs including the access certificate,
+ *                 the registration certificate, and the DCQL query. Returns a list of policy violations,
+ *                 if any, encountered during the evaluation.
+ */
+data class RegistrationCertificatePolicy(
+    val trust: X509CertificateTrust,
+    val apply: Authorize,
+) {
+
+    @JvmInline
+    value class PolicyViolation(val violation: String) {
+        init {
+            require(violation.isNotEmpty()) { "violation must not be empty" }
+        }
+    }
+
+    sealed interface Authorization {
+        data class Granted(val warnings: List<PolicyViolation> = emptyList()) : Authorization
+        data class NotGranted(val error: PolicyViolation) : Authorization
+    }
+
+    fun interface Authorize {
+        suspend operator fun invoke(
+            accessCertificate: X509Certificate,
+            registrationCertificate: JsonObject,
+            dcql: DCQL,
+        ): Authorization
+    }
+}
+
+/**
  * Wallet configuration options for OpenId4VP protocol.
  *
  * At minimum, a wallet configuration should define at least a [supportedClientIdPrefixes]
@@ -411,20 +448,27 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * If not provided, it will default to [SignedRequestConfiguration.Default]
  * @param responseEncryptionConfiguration whether wallet supports authorization response encryption. If not specified, it takes the default value
  * [ResponseEncryptionConfiguration.NotSupported].
- * @param vpConfiguration options about OpenId4VP.
+ * @param knownDCQLQueriesPerScope a set of DCQL queries that a verifier may request via a pre-agreed scope
+ * @param vpFormatsSupported The formats the wallet supports
+ * @param supportedTransactionDataTypes the types of Transaction Data that are supported by the wallet
  * @param clock the system Clock. If not provided system's default clock will be used.
  * @param supportedClientIdPrefixes the client id prefixes that are supported/trusted by the wallet
  * @param errorDispatchPolicy wallet's policy regarding error dispatching. Defaults to [ErrorDispatchPolicy.OnlyAuthenticatedClients].
+ * @param registrationCertificatePolicy wallet's policy regarding Wallet Relying Party Registration Certificates processing
  */
 data class OpenId4VPConfig(
     val issuer: Issuer? = SelfIssued,
     val signedRequestConfiguration: SignedRequestConfiguration = SignedRequestConfiguration.Default,
     val responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
-    val vpConfiguration: VPConfiguration,
+    val knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
+    val vpFormatsSupported: VpFormatsSupported,
+    val supportedTransactionDataTypes: List<SupportedTransactionDataType> = emptyList(),
     val clock: Clock = Clock.systemDefaultZone(),
     val supportedClientIdPrefixes: List<SupportedClientIdPrefix>,
     val errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
+    val registrationCertificatePolicy: RegistrationCertificatePolicy? = null,
 ) {
+
     init {
         require(supportedClientIdPrefixes.isNotEmpty()) { "At least a supported client id prefix must be provided" }
 
@@ -435,8 +479,39 @@ data class OpenId4VPConfig(
                 "Wrong configuration. Multi-singed requests policy must declare a supported client id prefix."
             }
         }
+
+        if (null == vpFormatsSupported.sdJwtVc) {
+            require(supportedTransactionDataTypes.none { it is SupportedTransactionDataType.SdJwtVc }) {
+                "SD-JWT VC Transaction Data cannot be used when SD-JWT VC is not supported"
+            }
+        }
     }
 
+    constructor(
+        issuer: Issuer? = SelfIssued,
+        signedRequestConfiguration: SignedRequestConfiguration = SignedRequestConfiguration.Default,
+        responseEncryptionConfiguration: ResponseEncryptionConfiguration = NotSupported,
+        knownDCQLQueriesPerScope: Map<String, DCQL> = emptyMap(),
+        vpFormatsSupported: VpFormatsSupported,
+        supportedTransactionDataTypes: List<SupportedTransactionDataType> = emptyList(),
+        clock: Clock = Clock.systemDefaultZone(),
+        errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
+        registrationCertificatePolicy: RegistrationCertificatePolicy? = null,
+        vararg supportedClientIdPrefixes: SupportedClientIdPrefix,
+    ) : this(
+        issuer = issuer,
+        signedRequestConfiguration = signedRequestConfiguration,
+        responseEncryptionConfiguration = responseEncryptionConfiguration,
+        knownDCQLQueriesPerScope = knownDCQLQueriesPerScope,
+        vpFormatsSupported = vpFormatsSupported,
+        supportedTransactionDataTypes = supportedTransactionDataTypes,
+        clock = clock,
+        supportedClientIdPrefixes = supportedClientIdPrefixes.toList(),
+        errorDispatchPolicy = errorDispatchPolicy,
+        registrationCertificatePolicy = registrationCertificatePolicy,
+    )
+
+    @Deprecated(message = "VPConfiguration merged in OpenId4VPConfig", replaceWith = ReplaceWith("OpenId4VPConfig"))
     constructor(
         issuer: Issuer? = SelfIssued,
         signedRequestConfiguration: SignedRequestConfiguration = SignedRequestConfiguration.Default,
@@ -444,15 +519,19 @@ data class OpenId4VPConfig(
         vpConfiguration: VPConfiguration,
         clock: Clock = Clock.systemDefaultZone(),
         errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
+        registrationCertificatePolicy: RegistrationCertificatePolicy? = null,
         vararg supportedClientIdPrefixes: SupportedClientIdPrefix,
     ) : this(
-        issuer,
-        signedRequestConfiguration,
-        responseEncryptionConfiguration,
-        vpConfiguration,
-        clock,
-        supportedClientIdPrefixes.toList(),
-        errorDispatchPolicy,
+        issuer = issuer,
+        signedRequestConfiguration = signedRequestConfiguration,
+        responseEncryptionConfiguration = responseEncryptionConfiguration,
+        knownDCQLQueriesPerScope = vpConfiguration.knownDCQLQueriesPerScope,
+        vpFormatsSupported = vpConfiguration.vpFormatsSupported,
+        supportedTransactionDataTypes = vpConfiguration.supportedTransactionDataTypes,
+        clock = clock,
+        supportedClientIdPrefixes = supportedClientIdPrefixes.toList(),
+        errorDispatchPolicy = errorDispatchPolicy,
+        registrationCertificatePolicy = registrationCertificatePolicy,
     )
 
     companion object {

@@ -35,7 +35,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
         val nonce = requiredNonce(requestObject)
         val scope = requiredScope(requestObject)
         val nonOpenIdScope = with(Scope) { scope.getOrNull()?.items()?.filter { it != OpenId }?.mergeOrNull() }
-        val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpConfiguration.vpFormatsSupported)
+        val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpFormatsSupported)
         val responseMode = requiredResponseModeOverDCApi(requestObject)
         val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
         val transactionData = optionalTransactionData(requestObject, query)
@@ -75,7 +75,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
         val state = requestObject.state
         val nonce = requiredNonce(requestObject)
         val responseMode = requiredResponseModeOverHttp(client, requestObject)
-        val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpConfiguration.vpFormatsSupported)
+        val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpFormatsSupported)
         val transactionData = optionalTransactionData(requestObject, query)
         val verifierInfo = optionalVerifierInfo(query, requestObject)
         val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
@@ -138,7 +138,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
 
     private fun lookupKnownDCQLQueries(scope: Scope): DCQL {
         scope.items().forEach { item ->
-            openId4VPConfig.vpConfiguration.knownDCQLQueriesPerScope[item.value]
+            openId4VPConfig.knownDCQLQueriesPerScope[item.value]
                 ?.let { return it }
         }
         throw ResolutionError.UnknownScope(scope).asException()
@@ -152,7 +152,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
             runCatchingCancellable {
                 unresolvedTransactionData.values.map { unresolved ->
                     val transactionData = TransactionData.parse(unresolved, query).getOrThrow()
-                    transactionData.ensureSupported(openId4VPConfig.vpConfiguration.supportedTransactionDataTypes)
+                    transactionData.ensureSupported(openId4VPConfig.supportedTransactionDataTypes)
                     transactionData
                 }
             }.getOrElse { error -> throw ResolutionError.InvalidTransactionData(error).asException() }
@@ -334,7 +334,7 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
                     responseMode,
                     query,
                     openId4VPConfig.responseEncryptionConfiguration,
-                    openId4VPConfig.vpConfiguration.vpFormatsSupported,
+                    openId4VPConfig.vpFormatsSupported,
                 )
             }
 

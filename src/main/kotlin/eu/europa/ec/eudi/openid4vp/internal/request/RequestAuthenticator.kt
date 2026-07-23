@@ -287,7 +287,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
         return verifierId.originalClientId to supportedClientIdPrefix
     }
 
-    private fun x5c(
+    private suspend fun x5c(
         requestJwt: SignedJWT,
         trust: X509CertificateTrust,
     ): List<X509Certificate> {

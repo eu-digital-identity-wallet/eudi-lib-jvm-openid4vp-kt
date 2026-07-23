@@ -211,6 +211,7 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
     init {
         require(attestations.isNotEmpty())
     }
+
     override fun toString(): String = attestations.toString()
 
     @Serializable
@@ -226,10 +227,12 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
             init {
                 require(value.isNotEmpty())
             }
+
             override fun toString(): String = value
 
             companion object {
                 val Jwt: Format get() = Format(OpenId4VPSpec.VERIFIER_INFO_FORMAT_JWT)
+                val REGISTRATION_CERTIFICATE: Format get() = Format(ETSI119472Part2.VERIFIER_INFO_REG_CERT_FORMAT)
             }
         }
 
@@ -239,6 +242,7 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
             init {
                 require((value is JsonPrimitive && value.isString) || (value is JsonObject))
             }
+
             override fun toString(): String = value.toString()
         }
     }
@@ -257,7 +261,7 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
  * @property responseEncryptionSpecification The verifier's requirements, if any, for encrypting the authorization response
  * @property vpFormatsSupported Populated when client metadata are provided along with the request. It contains the formats
  *   that both wallet and requester support. It is calculated by comparing wallet's configuration
- *   (@see [OpenId4VPConfig].vpConfiguration)and the formats passed in request's client metadata.
+ *   (@see [OpenId4VPConfig].vpFormatsSupported)and the formats passed in request's client metadata.
  */
 data class ResolvedRequestObject(
     val client: Client,
@@ -451,11 +455,48 @@ sealed interface ResolutionError : AuthorizationRequestError {
         @Suppress("unused")
         private fun readResolve(): Any = ClientVpFormatsNotSupportedFromWallet
     }
+
     data object UnsupportedDcApiExchangeProtocol : ResolutionError {
         @Suppress("unused")
         private fun readResolve(): Any = UnsupportedDcApiExchangeProtocol
     }
+
     data class DcApiExchangeProtocolNotMatchesReceivedRequest(val cause: String) : ResolutionError
+}
+
+/**
+ * Represents errors that can occur during the validation of authorization policies.
+ * These errors are specific to the evaluation of policies defined for authorization requests.
+ */
+sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError {
+
+    data object AuthorizationPolicyApplicableOnlyForX509HashClient : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = AuthorizationPolicyApplicableOnlyForX509HashClient
+    }
+
+    data object MissingRequiredRegistrationCertificate : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = MissingRequiredRegistrationCertificate
+    }
+
+    data object MultipleRegistrationCertificates : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = MultipleRegistrationCertificates
+    }
+
+    data object RegistrationCertificateNotTrusted : AuthorizationPolicyValidationError {
+        @Suppress("unused")
+        private fun readResolve(): Any = RegistrationCertificateNotTrusted
+    }
+
+    data class MalformedRegistrationCertificate(val cause: String) : AuthorizationPolicyValidationError {
+        init {
+            require(cause.isNotEmpty()) { "Cause cannot be empty" }
+        }
+    }
+
+    data class AuthorizationPolicyNotMet(val violation: RegistrationCertificatePolicy.PolicyViolation) : AuthorizationPolicyValidationError
 }
 
 /**
@@ -485,9 +526,13 @@ fun <T> AuthorizationRequestError.asFailure(): Result<T> =
 sealed interface Resolution {
     /**
      * Represents the success of validating and resolving an authorization request
-     * into a [requestObject]
+     * into a [requestObject]. It might include a list of [policyViolationWarnings] that are the result of
+     * evaluating that the [ResolvedRequestObject] complies with a pre-configured registration certificate policy.
      */
-    data class Success(val requestObject: ResolvedRequestObject) : Resolution
+    data class Success(
+        val requestObject: ResolvedRequestObject,
+        val policyViolationWarnings: List<RegistrationCertificatePolicy.PolicyViolation> = emptyList(),
+    ) : Resolution
 
     /**
      * Represents the failure of validating or resolving an authorization request
@@ -503,6 +548,14 @@ sealed interface Resolution {
         }
     }
 }
+
+suspend fun Resolution.andThen(
+    f: suspend (ResolvedRequestObject, List<RegistrationCertificatePolicy.PolicyViolation>) -> Resolution,
+): Resolution =
+    when (this) {
+        is Resolution.Success -> f(requestObject, policyViolationWarnings)
+        is Resolution.Invalid -> this
+    }
 
 /**
  * Information required for an [AuthorizationRequestError] to be dispatchable.
