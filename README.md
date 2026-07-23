@@ -18,7 +18,7 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
     * [Openid4VP via DC-API](#openid4vp-via-dc-api)
       * [Resolve an authorization request](#resolve-an-authorization-request)
       * [Assemble an authorization response](#assemble-an-authorization-response)
-    * [WRP Registration Certificate Policy](#wrp-registration-certificate-policy-)
+    * [WRP authorization using WRP Registration Certificate](#wrp-authorization-using-wrp-registration-certificate)
     * [Example](#example)
 * [OpenId4VP features supported](#openid4vp-features-supported)
 * [How to contribute](#how-to-contribute)
@@ -336,14 +336,25 @@ val consensus =  Consensus.PositiveConsensus(verifiablePresentations)
 val response: JsonObject = openId4VpOverDcApi.assembleResponse(requestObject, consensus)
 ```
 
-### WRP Registration Certificate Policy 
+### WRP authorization using WRP Registration Certificate
 
-In the context of presentation authorization request resolution, library can be configured to expect a Registration Certificate to be provided 
-from the relying party as part of its authorization request. By doing so library will expect that the `ResolvedRequestObject.verifierInfo` array
-includes a registration certificate as defined in 472-2 V1.2.1 and CIR 2026/1731 Annex II. 
+Library allows the caller to enforce Relying Party Authorization policies based on WRPRC. It can be configured to expect a Registration Certificate (WRPRC) 
+to be provided in the authorization request. By doing so it is expected that the `ResolvedRequestObject.verifierInfo` array includes a WRPRC
+as defined in 472-2 V1.2.1 and CIR 2026/1731 Annex II. 
+
+> [!NOTE]
+> The authorization policy can be applied for authorization requests coming both via DC API channel or http redirects.
+
+> [!WARNING]
+> 
+> Authorization policy based on WRPRC is only applicable to `x509_hash` client id scheme.
+
+> [!IMPORTANT]
+> It is **not in the scope** of the library to provide implementations of authorization policies. Only gives the proper means to 
+> hook a policy's application to the proper point of the authorization request resolution flow. 
 
 To configure library to expect a registration certificate a [RegistrationCertificatePolicy](src/main/kotlin/eu/europa/ec/eudi/openid4vp/Config.kt) must be provided in `OpenId4VPConfig`. If such 
-a policy is provided, during the request object resolution step the library will:
+a policy is provided, and during the request object resolution step, the library will:
 - Extract the registration certificate from the authorization request.
 - Evaluate that the provided registration is signed by a trusted WPRRC Provider (calling `OpenId4VPConfig.registrationCertificatePolicy.trust()`)
 - Evaluate that the provided registration certificate complies with the policy provided (calling `OpenId4VPConfig.registrationCertificatePolicy.apply()`)
@@ -352,7 +363,7 @@ a policy is provided, during the request object resolution step the library will
 
 ```kotlin
 val policy = RegistrationCertificatePolicy(
-    trust = { List<X509Certificate> -> ... },
+    trust = { chain: List<X509Certificate> -> ... },
     apply = { accessCertificate: X509Certificate, regCertContent: JsonObject, query: DCQL -> ... }, 
 )
 
@@ -363,7 +374,7 @@ val openId4VPConfig = OpenId4VPConfig(
 )
 ```
 
-**NOTE:** The above behavior is applied for authorization requests coming both via DC API channel or http redirects.
+
 
 ### Example
 

@@ -54,8 +54,8 @@ class WrprcTest {
                     deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             sdJwtVc = VpFormatsSupported.SdJwtVc(
-                sdJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256, JWSAlgorithm.RS256),
-                kbJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256, JWSAlgorithm.RS256),
+                sdJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
+                kbJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
             ),
         ),
     )
@@ -74,12 +74,10 @@ class WrprcTest {
                 sdJwtAlgorithms = listOf(
                     JWSAlgorithm.ES512,
                     JWSAlgorithm.ES256,
-                    JWSAlgorithm.RS256,
                 ),
                 kbJwtAlgorithms = listOf(
                     JWSAlgorithm.ES512,
                     JWSAlgorithm.ES256,
-                    JWSAlgorithm.RS256,
                 ),
             ),
             VpFormatsSupported.MsoMdoc(
