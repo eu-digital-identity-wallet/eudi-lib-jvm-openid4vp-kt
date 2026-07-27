@@ -25,7 +25,6 @@ import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.oauth2.sdk.id.Issuer
 import eu.europa.ec.eudi.openid4vp.ResponseEncryptionConfiguration.NotSupported
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
-import kotlinx.serialization.json.JsonObject
 import java.net.URI
 import java.security.PublicKey
 import java.security.cert.X509Certificate
@@ -404,37 +403,54 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
 }
 
 /**
- * Represents a policy to be applied on a registration certificate in the context of X.509-based trust.
+ * Represents a policy for validating a registration certificate against an access certificate and a set of
+ * constraints specified through a DCQL (Dynamic Credential Query Language) instance.
  *
- * @property trust Defines the trust evaluation mechanism for an X.509 certificate chain,
- *                 determining whether a given chain of X.509 certificates is trusted.
- * @property apply A function that evaluates the policy based on inputs including the access certificate,
- *                 the registration certificate, and the DCQL query. Returns a list of policy violations,
- *                 if any, encountered during the evaluation.
+ * The primary purpose of this functional interface is to determine whether the registration certificate is
+ * authorized based on the policy rules and return an appropriate `Authorization` result.
  */
-data class RegistrationCertificatePolicy(
-    val trust: X509CertificateTrust,
-    val apply: Authorize,
-) {
+fun interface RegistrationCertificatePolicy {
 
-    @JvmInline
-    value class PolicyViolation(val violation: String) {
-        init {
-            require(violation.isNotEmpty()) { "violation must not be empty" }
-        }
-    }
+    suspend operator fun invoke(
+        accessCertificate: X509Certificate,
+        registrationCertificate: String,
+        dcql: DCQL,
+    ): Authorization
 
+    /**
+     * Represents the outcome of an authorization evaluation based on a registration certificate policy.
+     * IT is used to express whether an authorization request can be authorized based on specific policy requirements.
+     *
+     * It provides two possible outcomes:
+     * - `Granted`: Indicates that the authorization was successful. May include
+     *   a list of warnings as `PolicyViolation` instances to highlight potential
+     *   issues that do not block authorization.
+     * - `NotGranted`: Indicates that the authorization was denied. Includes a
+     *   single `PolicyViolation` as the reason for denial.
+     */
     sealed interface Authorization {
         data class Granted(val warnings: List<PolicyViolation> = emptyList()) : Authorization
         data class NotGranted(val error: PolicyViolation) : Authorization
     }
 
-    fun interface Authorize {
-        suspend operator fun invoke(
-            accessCertificate: X509Certificate,
-            registrationCertificate: JsonObject,
-            dcql: DCQL,
-        ): Authorization
+    /**
+     * Represents a specific violation of a policy rule.
+     *
+     * This value class is used as part of the authorization evaluation process
+     * within a registration certificate policy. It encapsulates a description
+     * of the policy rule that has been violated, providing a clear and concise
+     * representation of the issue.
+     *
+     * @property violation The description of the policy rule violation. This
+     * value must not be empty.
+     *
+     * @throws IllegalArgumentException if the violation description is empty.
+     */
+    @JvmInline
+    value class PolicyViolation(val violation: String) {
+        init {
+            require(violation.isNotEmpty()) { "violation must not be empty" }
+        }
     }
 }
 

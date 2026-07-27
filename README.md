@@ -29,23 +29,23 @@ the [EUDI Wallet Reference Implementation project description](https://github.co
 This is a Kotlin library, targeting JVM, that supports the [OpenId4VP](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html) protocol.
 In particular, the library focuses on the wallet's role using this protocol, and provides the following features:
 
-| Feature                                                                                                                   | Coverage                                                                                                                               |
-|---------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|
-| [Verifiable Presentations Authorization Requests](#resolve-an-authorization-request-uri)                                  | ✅                                                                                                                                      |
+| Feature                                                                                                                   | Coverage                                                                                                                                      |
+|---------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------|
+| [Verifiable Presentations Authorization Requests](#resolve-an-authorization-request-uri)                                  | ✅                                                                                                                                            |
 | Client authentication prefixes                                                                                            | ✅ pre-registered, ✅ redirect_uri, ❌ openid_federation, ✅ decentralized_identifier, ✅ verifier_attestation, ✅ x509_san_dns, ✅ x509_hash |
-| Attestation query dialect                                                                                                 | ✅ DCQL                                                                                                                                 |
-| Signed/encrypted authorization requests (JAR)                                                                             | ✅                                                                                                                                      |
-| Scoped authorization requests                                                                                             | ✅                                                                                                                                      |
-| Request URI Methods                                                                                                       | ✅ GET, ✅ POST                                                                                                                          |
-| Wallet metadata                                                                                                           | ✅                                                                                                                                      |
-| [Dispatch positive and negative responses](#dispatch-authorization-response-to-verifier--rp)                              | ✅                                                                                                                                      |
-| [Dispatch authorization error response to verifier when possible](#dispatch-authorization-error-response-to-verifier--rp) | ✅                                                                                                                                      |
-| Encrypted authorization responses                                                                                         | ✅                                                                                                                                      |
-| Response modes                                                                                                            | ✅ direct_post, ✅ direct_post.jwt, ✅ query, ✅ query.jwt, ✅ fragment, ✅ fragment.jwt, ✅ dc_api, ✅ dc_api.jwt                             |
-| Transaction Data                                                                                                          | ✅                                                                                                                                      |
-| Verifier Attestation JWT                                                                                                  | ✅                                                                                                                                      |
-| Digital Credential API                                                                                                    | ✅                                                                                                                                      |
-| [Apply WRP Registration Policy](#wrp-registration-certificate-policy-)                                                                                       | ✅                                                                                                                                      |
+| Attestation query dialect                                                                                                 | ✅ DCQL                                                                                                                                       |
+| Signed/encrypted authorization requests (JAR)                                                                             | ✅                                                                                                                                            |
+| Scoped authorization requests                                                                                             | ✅                                                                                                                                            |
+| Request URI Methods                                                                                                       | ✅ GET, ✅ POST                                                                                                                               |
+| Wallet metadata                                                                                                           | ✅                                                                                                                                            |
+| [Dispatch positive and negative responses](#dispatch-authorization-response-to-verifier--rp)                              | ✅                                                                                                                                            |
+| [Dispatch authorization error response to verifier when possible](#dispatch-authorization-error-response-to-verifier--rp) | ✅                                                                                                                                            |
+| Encrypted authorization responses                                                                                         | ✅                                                                                                                                            |
+| Response modes                                                                                                            | ✅ direct_post, ✅ direct_post.jwt, ✅ query, ✅ query.jwt, ✅ fragment, ✅ fragment.jwt, ✅ dc_api, ✅ dc_api.jwt                            |
+| Transaction Data                                                                                                          | ✅                                                                                                                                            |
+| Verifier Attestation JWT                                                                                                  | ✅                                                                                                                                            |
+| Digital Credential API                                                                                                    | ✅                                                                                                                                            |
+| [Apply WRP Registration Policy](#wrp-authorization-using-wrp-registration-certificate)                                    | ✅                                                                                                                                            |
 
 ## Disclaimer
 
@@ -339,7 +339,7 @@ val response: JsonObject = openId4VpOverDcApi.assembleResponse(requestObject, co
 ### WRP authorization using WRP Registration Certificate
 
 Library allows the caller to enforce Relying Party Authorization policies based on WRPRC. It can be configured to expect a Registration Certificate (WRPRC) 
-to be provided in the authorization request. By doing so it is expected that the `ResolvedRequestObject.verifierInfo` array includes a WRPRC
+to be provided in the authorization request. By doing so, it is expected that the `ResolvedRequestObject.verifierInfo` array includes a WRPRC
 as defined in 472-2 V1.2.1 and CIR 2026/1731 Annex II. 
 
 > [!NOTE]
@@ -356,15 +356,13 @@ as defined in 472-2 V1.2.1 and CIR 2026/1731 Annex II.
 To configure library to expect a registration certificate a [RegistrationCertificatePolicy](src/main/kotlin/eu/europa/ec/eudi/openid4vp/Config.kt) must be provided in `OpenId4VPConfig`. If such 
 a policy is provided, and during the request object resolution step, the library will:
 - Extract the registration certificate from the authorization request.
-- Evaluate that the provided registration is signed by a trusted WPRRC Provider (calling `OpenId4VPConfig.registrationCertificatePolicy.trust()`)
 - Evaluate that the provided registration certificate complies with the policy provided (calling `OpenId4VPConfig.registrationCertificatePolicy.apply()`)
 - Include policy violation warnings, if any, in the final `Resolution.Success`  
 - Fail the authorization request resolution step if policy is violated
 
 ```kotlin
-val policy = RegistrationCertificatePolicy(
-    trust = { chain: List<X509Certificate> -> ... },
-    apply = { accessCertificate: X509Certificate, regCertContent: JsonObject, query: DCQL -> ... }, 
+val policy = RegistrationCertificatePolicy(    
+    apply = { accessCertificate: X509Certificate, regCertContent: String, query: DCQL -> ... }, 
 )
 
 val openId4VPConfig = OpenId4VPConfig(

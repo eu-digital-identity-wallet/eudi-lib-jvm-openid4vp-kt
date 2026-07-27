@@ -485,11 +485,6 @@ sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError 
         private fun readResolve(): Any = MultipleRegistrationCertificates
     }
 
-    data object RegistrationCertificateNotTrusted : AuthorizationPolicyValidationError {
-        @Suppress("unused")
-        private fun readResolve(): Any = RegistrationCertificateNotTrusted
-    }
-
     data class MalformedRegistrationCertificate(val cause: String) : AuthorizationPolicyValidationError {
         init {
             require(cause.isNotEmpty()) { "Cause cannot be empty" }
