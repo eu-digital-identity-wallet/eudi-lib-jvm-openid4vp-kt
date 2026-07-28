@@ -20,7 +20,6 @@ import com.nimbusds.jwt.SignedJWT
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.dcql.*
 import kotlinx.coroutines.test.runTest
-import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import java.io.InputStream
 import java.security.cert.X509Certificate
@@ -29,7 +28,6 @@ import kotlin.test.*
 class RegistrationCertificatePolicyEvaluatorTest {
 
     private val wrprcValid = load("certificates/wrprc.txt")!!.bufferedReader().readText()
-    private val wrprcUnsigned = load("certificates/wrprc_unsigned.txt")!!.bufferedReader().readText()
 
     private val dummyCert: X509Certificate by lazy {
         val wrprc = SignedJWT.parse(wrprcValid)
@@ -47,15 +45,11 @@ class RegistrationCertificatePolicyEvaluatorTest {
         ),
     )
 
-    private val trustAll: (List<X509Certificate>) -> Boolean = { _ -> true }
-    private val trustNone: (List<X509Certificate>) -> Boolean = { _ -> false }
-
     @Test
     fun `evaluate returns Granted when client is not X509Hash`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ ->
+        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ ->
             RegistrationCertificatePolicy.Authorization.NotGranted(RegistrationCertificatePolicy.PolicyViolation("should not be called"))
         }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
         val request = resolvedRequestObject(client = Client.Origin("client-id"))
 
         val result = evaluator.evaluate(request)
@@ -64,8 +58,7 @@ class RegistrationCertificatePolicyEvaluatorTest {
 
     @Test
     fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and verifierInfo is null`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
+        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
         val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = null)
 
         val exception = assertFailsWith<AuthorizationRequestException> {
@@ -76,8 +69,7 @@ class RegistrationCertificatePolicyEvaluatorTest {
 
     @Test
     fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and WRPRC is missing`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
+        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
         val verifierInfo = VerifierInfo(
             listOf(
                 VerifierInfo.Attestation(
@@ -95,29 +87,8 @@ class RegistrationCertificatePolicyEvaluatorTest {
     }
 
     @Test
-    fun `evaluate throws RegistrationCertificateNotTrusted when registration certificate is not trusted`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustNone) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                ),
-            ),
-        )
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
-
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
-        }
-        assertEquals(AuthorizationPolicyValidationError.RegistrationCertificateNotTrusted, exception.error)
-    }
-
-    @Test
     fun `evaluate throws MultipleRegistrationCertificates when more than one registration certificates are provided`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
+        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
         val verifierInfo = VerifierInfo(
             listOf(
                 VerifierInfo.Attestation(
@@ -139,31 +110,8 @@ class RegistrationCertificatePolicyEvaluatorTest {
     }
 
     @Test
-    fun `evaluate throws MalformedRegistrationCertificate when registration certificate is an unsigned jwt`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    VerifierInfo.Attestation.Data(JsonPrimitive(wrprcUnsigned)),
-                ),
-            ),
-        )
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
-
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
-        }
-        val error = exception.error
-        assertIs<AuthorizationPolicyValidationError.MalformedRegistrationCertificate>(error)
-        assertTrue(error.cause.contains("Provided registration certificate is not a valid signed JWT"))
-    }
-
-    @Test
     fun `evaluate throws MalformedRegistrationCertificate when WRPRC is passed as Attestation with credentialIds not null`() = runTest {
-        val policy = RegistrationCertificatePolicy(trustAll) { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
+        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
         val verifierInfo = VerifierInfo(
             listOf(
                 VerifierInfo.Attestation(
@@ -186,16 +134,15 @@ class RegistrationCertificatePolicyEvaluatorTest {
     @Test
     fun `evaluate calls policy and returns its result when everything is valid`() = runTest {
         var policyCalled = false
-
-        val policy = RegistrationCertificatePolicy(trustAll) { accessCert, registrationCert, dcqlParam ->
+        val evaluator = RegistrationCertificatePolicyEvaluator { accessCert, registrationCert, dcqlParam ->
             policyCalled = true
             assertEquals(dummyCert, accessCert)
             assertNotNull(registrationCert)
-            assertIs<JsonObject>(registrationCert)
+            assertIs<String>(registrationCert)
             assertEquals(dcql, dcqlParam)
             RegistrationCertificatePolicy.Authorization.Granted()
         }
-        val evaluator = RegistrationCertificatePolicyEvaluator(policy)
+
         val verifierInfo = VerifierInfo(
             listOf(
                 VerifierInfo.Attestation(

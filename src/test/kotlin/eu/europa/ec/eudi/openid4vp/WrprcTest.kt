@@ -138,12 +138,7 @@ class WrprcTest {
         @Test
         fun `and registration policy is set, requests without WRPRC cannot be resolved`() = runTest {
             val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy(
-                    RegistrationCertificatePolicy(
-                        trust = { _ -> true },
-                        apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
-                    ),
-                ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
             )
 
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
@@ -171,13 +166,7 @@ class WrprcTest {
                 PolicyViolation("violation warning 3"),
             )
             val openId4Vp = openId4Vp(
-                walletConfig
-                    .withWrprcPolicy(
-                        RegistrationCertificatePolicy(
-                            trust = { _ -> true },
-                            apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
-                        ),
-                    ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
             )
 
             val verifierInfo = VerifierInfo(
@@ -211,13 +200,7 @@ class WrprcTest {
         fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() = runTest {
             val policyViolationError = PolicyViolation("Policy violated")
             val openId4Vp = openId4Vp(
-                walletConfig
-                    .withWrprcPolicy(
-                        RegistrationCertificatePolicy(
-                            trust = { _ -> true },
-                            apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
-                        ),
-                    ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
             )
             val verifierInfo = VerifierInfo(
                 listOf(
@@ -282,12 +265,7 @@ class WrprcTest {
         @Test
         fun `and registration policy is set, requests without WRPRC cannot be resolved`() = runTest {
             val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy(
-                    RegistrationCertificatePolicy(
-                        trust = { _ -> true },
-                        apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
-                    ),
-                ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
             )
 
             val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
@@ -318,13 +296,7 @@ class WrprcTest {
                 PolicyViolation("violation warning 3"),
             )
             val openId4Vp = openId4Vp(
-                walletConfig
-                    .withWrprcPolicy(
-                        RegistrationCertificatePolicy(
-                            trust = { _ -> true },
-                            apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
-                        ),
-                    ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
             )
             val verifierInfo = VerifierInfo(
                 listOf(
@@ -359,13 +331,7 @@ class WrprcTest {
         fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() = runTest {
             val policyViolationError = PolicyViolation("Policy violated")
             val openId4Vp = openId4Vp(
-                walletConfig
-                    .withWrprcPolicy(
-                        RegistrationCertificatePolicy(
-                            trust = { _ -> true },
-                            apply = { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
-                        ),
-                    ),
+                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
             )
             val verifierInfo = VerifierInfo(
                 listOf(
