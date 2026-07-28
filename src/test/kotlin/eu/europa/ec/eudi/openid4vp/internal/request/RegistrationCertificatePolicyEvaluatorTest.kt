@@ -45,9 +45,6 @@ class RegistrationCertificatePolicyEvaluatorTest {
         ),
     )
 
-    private val trustAll: (List<X509Certificate>) -> Boolean = { _ -> true }
-    private val trustNone: (List<X509Certificate>) -> Boolean = { _ -> false }
-
     @Test
     fun `evaluate returns Granted when client is not X509Hash`() = runTest {
         val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ ->

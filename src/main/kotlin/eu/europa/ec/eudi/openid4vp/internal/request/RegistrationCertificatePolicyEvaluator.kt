@@ -68,7 +68,7 @@ private fun VerifierInfo.registrationCertificate(): String {
         malformedRegistrationCertificate("Provided credentialIds with registrations certificate while not expected")
     }
     val element = wrprcAttestation.data.value
-    ensure(element is JsonPrimitive) {
+    ensure(element is JsonPrimitive && element.isString) {
         malformedRegistrationCertificate("Provided registration certificate is not a JSON primitive")
     }
     return element.jsonPrimitive.content
