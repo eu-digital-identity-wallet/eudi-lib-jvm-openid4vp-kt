@@ -23,6 +23,13 @@ internal value class AbsoluteDIDUrl private constructor(val uri: URI) {
 
     override fun toString(): String = uri.toString()
 
+    fun didPart(): DID {
+        val uriStr = uri.toString()
+        val didEnd = uriStr.indexOfFirst { it == '#' || it == '/' || it == '?' }
+        val didStr = if (didEnd >= 0) uriStr.substring(0, didEnd) else uriStr
+        return DID.parse(didStr).getOrThrow()
+    }
+
     companion object {
 
         fun parse(s: String): Result<AbsoluteDIDUrl> = runCatchingCancellable {
