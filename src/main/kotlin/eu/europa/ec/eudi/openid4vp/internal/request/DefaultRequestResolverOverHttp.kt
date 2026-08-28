@@ -203,7 +203,8 @@ internal class DefaultRequestResolverOverHttp(
             try {
                 validateRequestObject(authenticatedRequest)
             } catch (e: AuthorizationRequestException) {
-                val dispatchDetails = dispatchErrorDetailsOrNull(authenticatedRequest.requestObject, openId4VPConfig)
+                val dispatchDetails =
+                    dispatchErrorDetailsOrNull(authenticatedRequest.requestObject, authenticatedRequest.client, openId4VPConfig)
                 return Resolution.Invalid(e.error, dispatchDetails)
             }
 
@@ -228,6 +229,54 @@ internal class DefaultRequestResolverOverHttp(
 }
 
 /**
+ * Checks that the URI in the [responseMode] belongs to the [client], mirroring the checks
+ * in [RequestObjectValidator.requiredResponseModeOverHttp].
+ *
+ * @return `true` if the URI matches, `false` otherwise.
+ */
+private fun uriMatchesClient(
+    responseMode: ResponseMode,
+    client: AuthenticatedClient,
+): Boolean {
+    val uri: URI = when (responseMode) {
+        is ResponseMode.DirectPost -> responseMode.responseURI.toURI()
+        is ResponseMode.DirectPostJwt -> responseMode.responseURI.toURI()
+        is ResponseMode.Query -> responseMode.redirectUri
+        is ResponseMode.QueryJwt -> responseMode.redirectUri
+        is ResponseMode.Fragment -> responseMode.redirectUri
+        is ResponseMode.FragmentJwt -> responseMode.redirectUri
+        ResponseMode.DCApi,
+        ResponseMode.DCApiJwt,
+        -> return false
+    }
+    return when (client) {
+        is AuthenticatedClient.Preregistered -> true
+        is AuthenticatedClient.RedirectUri -> client.clientId == uri
+        is AuthenticatedClient.DecentralizedIdentifier -> true
+        is AuthenticatedClient.VerifierAttestation -> {
+            val allowedUris = when (responseMode) {
+                is ResponseMode.Query,
+                is ResponseMode.QueryJwt,
+                is ResponseMode.Fragment,
+                is ResponseMode.FragmentJwt,
+                -> client.claims.redirectUris
+                is ResponseMode.DirectPost,
+                is ResponseMode.DirectPostJwt,
+                -> client.claims.responseUris
+                ResponseMode.DCApi,
+                ResponseMode.DCApiJwt,
+                -> return false
+            }
+            allowedUris == null || uri.toString() in allowedUris
+        }
+
+        is AuthenticatedClient.X509SanDns -> client.clientId == uri.host
+        is AuthenticatedClient.X509Hash -> true
+        is AuthenticatedClient.Origin -> false
+    }
+}
+
+/**
  * Creates an invalid resolution for errors that manifested while trying to authenticate a Client.
  */
 private fun dispatchErrorDetailsOrNull(
@@ -236,7 +285,7 @@ private fun dispatchErrorDetailsOrNull(
 ): ErrorDispatchDetails? =
     when (fetchedRequest) {
         is ReceivedRequest.Signed -> dispatchErrorDetailsOrNull(fetchedRequest.jwsJson, openId4VPConfig)
-        is ReceivedRequest.Unsigned -> dispatchErrorDetailsOrNull(fetchedRequest.requestObject, openId4VPConfig)
+        is ReceivedRequest.Unsigned -> dispatchErrorDetailsOrNull(fetchedRequest.requestObject, null, openId4VPConfig)
         is ReceivedRequest.MultiSigned -> error("Multisigned requests not expected over redirects")
     }
 
@@ -248,12 +297,17 @@ private fun dispatchErrorDetailsOrNull(
  * * the response mode does not require encryption
  * * the response mode requires encryption, and we have resolved Client metadata that contains encryption parameters compatible with
  * the configuration of the Wallet
+ *
+ * When [client] is provided, the URI in the response mode is validated against the client identity,
+ * mirroring the checks in [RequestObjectValidator.requiredResponseModeOverHttp].
  */
 private fun dispatchErrorDetailsOrNull(
     unvalidatedRequest: UnvalidatedRequestObject,
+    client: AuthenticatedClient?,
     openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? {
     return unvalidatedRequest.responseMode()?.let { responseMode ->
+        if (client != null && !uriMatchesClient(responseMode, client)) return null
         val responseEncryptionSpecification =
             unvalidatedRequest.responseEncryptionSpecification(openId4VPConfig, responseMode)
         ErrorDispatchDetails(
@@ -286,23 +340,37 @@ private fun UnvalidatedRequestObject.responseEncryptionSpecification(
 }
 
 private fun UnvalidatedRequestObject.responseMode(): ResponseMode? {
-    fun UnvalidatedRequestObject.responseUri(): URL? =
-        responseUri?.let {
-            runCatchingCancellable { URL(it) }.getOrNull()
-        }
+    fun responseUri(): URL? =
+        responseUri?.asHttpsURL()?.getOrNull()
 
-    fun UnvalidatedRequestObject.redirectUri(): URI? =
-        redirectUri?.let {
-            runCatchingCancellable { URI.create(it) }.getOrNull()
-        }
+    fun redirectUri(): URI? =
+        redirectUri?.asHttpsURI()?.getOrNull()
 
     return when (responseMode) {
-        "direct_post" -> responseUri()?.let { ResponseMode.DirectPost(it) }
-        "direct_post.jwt" -> responseUri()?.let { ResponseMode.DirectPostJwt(it) }
-        "query" -> redirectUri()?.let { ResponseMode.Query(it) }
-        "query.jwt" -> redirectUri()?.let { ResponseMode.QueryJwt(it) }
-        null, "fragment" -> redirectUri()?.let { ResponseMode.Fragment(it) }
-        "fragment.jwt" -> redirectUri()?.let { ResponseMode.FragmentJwt(it) }
+        "direct_post" ->
+            if (redirectUri != null) null
+            else responseUri()?.let { ResponseMode.DirectPost(it) }
+
+        "direct_post.jwt" ->
+            if (redirectUri != null) null
+            else responseUri()?.let { ResponseMode.DirectPostJwt(it) }
+
+        "query" ->
+            if (responseUri != null) null
+            else redirectUri()?.let { ResponseMode.Query(it) }
+
+        "query.jwt" ->
+            if (responseUri != null) null
+            else redirectUri()?.let { ResponseMode.QueryJwt(it) }
+
+        null, "fragment" ->
+            if (responseUri != null) null
+            else redirectUri()?.let { ResponseMode.Fragment(it) }
+
+        "fragment.jwt" ->
+            if (responseUri != null) null
+            else redirectUri()?.let { ResponseMode.FragmentJwt(it) }
+
         else -> null
     }
 }
@@ -312,10 +380,7 @@ private fun dispatchErrorDetailsOrNull(
     openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? =
     runCatchingCancellable {
-        dispatchErrorDetailsOrNull(
-            jwsJson.decodePayloadAs<UnvalidatedRequestObject>(),
-            openId4VPConfig,
-        )
+        dispatchErrorDetailsOrNull(jwsJson.decodePayloadAs<UnvalidatedRequestObject>(), null, openId4VPConfig)
     }.getOrNull()
 
 private fun URI.toKtorUrl(): Url = URLBuilder().takeFrom(this.toString()).build()

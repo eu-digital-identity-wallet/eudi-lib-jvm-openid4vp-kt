@@ -591,6 +591,114 @@ class UnvalidatedRequestResolverTest {
             test(genState())
             test()
         }
+
+        @Test
+        fun `error dispatch with non-HTTPS response_uri should be non-dispatchable`() = runTest {
+            val allClientsConfig = walletConfig.copy(
+                errorDispatchPolicy = ErrorDispatchPolicy.AllClients,
+            )
+            val resolver = DefaultRequestResolverOverHttp(allClientsConfig, httpClient)
+
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&response_mode=direct_post" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&response_uri=http%3A%2F%2Fattacker.example.com%2Fcallback" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded"
+
+            val resolution = resolver.resolveRequestUri(authRequest)
+            val invalid = assertIs<Resolution.Invalid>(resolution)
+            assertNull(invalid.dispatchDetails)
+        }
+
+        @Test
+        fun `error dispatch with non-HTTPS redirect_uri should be non-dispatchable`() = runTest {
+            val allClientsConfig = walletConfig.copy(
+                errorDispatchPolicy = ErrorDispatchPolicy.AllClients,
+            )
+            val resolver = DefaultRequestResolverOverHttp(allClientsConfig, httpClient)
+
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&client_id=redirect_uri%3Ahttp%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=http%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded"
+
+            val resolution = resolver.resolveRequestUri(authRequest)
+            val invalid = assertIs<Resolution.Invalid>(resolution)
+            assertNull(invalid.dispatchDetails)
+        }
+
+        @Test
+        fun `error dispatch with both redirect_uri and response_uri should be non-dispatchable`() = runTest {
+            val allClientsConfig = walletConfig.copy(
+                errorDispatchPolicy = ErrorDispatchPolicy.AllClients,
+            )
+            val resolver = DefaultRequestResolverOverHttp(allClientsConfig, httpClient)
+
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_token" +
+                    "&response_mode=direct_post" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fcb" +
+                    "&response_uri=https%3A%2F%2Fclient.example.org%2Fcallback" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded"
+
+            val resolution = resolver.resolveRequestUri(authRequest)
+            val invalid = assertIs<Resolution.Invalid>(resolution)
+            assertNull(invalid.dispatchDetails)
+        }
+
+        @Test
+        fun `error dispatch with valid HTTPS URI should be dispatchable under AllClients policy`() = runTest {
+            val allClientsConfig = walletConfig.copy(
+                errorDispatchPolicy = ErrorDispatchPolicy.AllClients,
+            )
+            val resolver = DefaultRequestResolverOverHttp(allClientsConfig, httpClient)
+
+            val authRequest =
+                "https://client.example.org/universal-link?" +
+                    "response_type=vp_tokens" +
+                    "&response_mode=direct_post" +
+                    "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcallback" +
+                    "&response_uri=https%3A%2F%2Fclient.example.org%2Fcallback" +
+                    "&nonce=n-0S6_WzA2Mj" +
+                    "&dcql_query=$dcqlQueryURLEncoded"
+
+            val resolution = resolver.resolveRequestUri(authRequest)
+            val invalid = assertIs<Resolution.Invalid>(resolution)
+            assertNotNull(invalid.dispatchDetails)
+        }
+
+        @Test
+        fun `error dispatch with client URI mismatch should be non-dispatchable`() = runTest {
+            val clientId = "x509_san_dns:verifier.example.gr"
+            val signedJwt = unvalidatedRequestOverRedirects(
+                clientId = clientId,
+                responseUri = "https://wrong-host.example.com/callback",
+                dcqlQuery = readFileAsText("dcql/eudi_msomdoc_pid_dcql_query.json"),
+                clientMetadata = UnvalidatedClientMetaData(
+                    jwks = Json.parseToJsonElement(JWKSet(signingKey).toPublicJWKSet().toString()).jsonObject,
+                    vpFormatsSupported = VpFormatsSupported(
+                        msoMdoc = VpFormatsSupported.MsoMdoc(
+                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        ),
+                    ),
+                ),
+            ).signWithKeystore()
+
+            val authRequest = "http://localhost:8080/public_url?client_id=$clientId&request=$signedJwt"
+            val resolution = resolver().resolveRequestUri(authRequest)
+            val invalid = assertIs<Resolution.Invalid>(resolution)
+            assertNull(invalid.dispatchDetails)
+        }
     }
 
     @DisplayName("when authorization request comes through DC API channel")
