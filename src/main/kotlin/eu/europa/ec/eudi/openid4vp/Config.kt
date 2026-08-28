@@ -48,7 +48,7 @@ data class PreregisteredClient(
     init {
         if (jarConfig != null) {
             require(!jarConfig.second.isEmpty) { "JWKSet cannot be empty" }
-            val allKeysArePublic = jarConfig.second.keys.all { it.isPrivate == false }
+            val allKeysArePublic = jarConfig.second.keys.all { !it.isPrivate }
             require(allKeysArePublic) { "JWKSet must contain only public keys" }
         }
     }
@@ -101,12 +101,22 @@ sealed interface SupportedClientIdPrefix {
      * header a Verifier Attestation JWT under `jwt` claim
      *
      * @param trust a function for verifying the digital signature of the Verifier Attestation JWT.
-     * @param clockSkew max acceptable skew between wallet and attestation issuer
+     * @param clockSkew max acceptable skew between wallet and attestation issuer, up to 60 sec. Defaults to 15 sec.
      */
     data class VerifierAttestation(
         val trust: JWSVerifier,
         val clockSkew: Duration = Duration.ofSeconds(15L),
-    ) : SupportedClientIdPrefix
+    ) : SupportedClientIdPrefix {
+        init {
+            require(clockSkew <= MAX_CLOCK_SKEW) {
+                "clockSkew must not exceed ${MAX_CLOCK_SKEW.toSeconds()} seconds"
+            }
+        }
+
+        companion object {
+            private val MAX_CLOCK_SKEW: Duration = Duration.ofSeconds(60L)
+        }
+    }
 
     /**
      * Wallet trusts verifiers that are able to present a Client Identifier which is a DNS name and
@@ -359,7 +369,7 @@ sealed interface MultiSignedRequestsPolicy {
  * @param supportedAlgorithms the algorithms supported for the signature of the JAR
  * @param supportedRequestUriMethods which of the `request_uri_method` methods are supported
  * @param multiSignedRequestsPolicy whether the wallet supports multi-signed requests and if so, what is the expected client prefix
- * @param clockSkew max acceptable skew between wallet and verifier when performing request signature validation
+ * @param clockSkew max acceptable skew between wallet and verifier when performing request signature validation, up to 60 sec. Defaults to 15 sec
  */
 data class SignedRequestConfiguration(
     val supportedAlgorithms: List<JWSAlgorithm>,
@@ -369,9 +379,14 @@ data class SignedRequestConfiguration(
 ) {
     init {
         require(supportedAlgorithms.isNotEmpty()) { "JAR signing algorithms cannot be empty" }
+        require(clockSkew <= MAX_CLOCK_SKEW) {
+            "clockSkew must not exceed ${MAX_CLOCK_SKEW.toSeconds()} seconds"
+        }
     }
 
     companion object {
+        private val MAX_CLOCK_SKEW: Duration = Duration.ofSeconds(60L)
+
         /**
          * The default JAR configuration list as trusted algorithms ES256, ES384, and ES512.
          * Also, both `request_uri_method` are supported.
