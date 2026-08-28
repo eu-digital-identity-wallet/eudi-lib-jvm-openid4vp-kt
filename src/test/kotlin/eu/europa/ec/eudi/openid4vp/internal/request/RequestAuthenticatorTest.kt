@@ -264,6 +264,45 @@ class ClientAuthenticatorOverHTTPTest {
         }
 
         @Test
+        fun `if kid extends victim DID identifier, authentication fails`() = runTest {
+            val (alg, key) = algAndKey
+
+            // Attack: kid uses a DID that extends the victim's DID
+            val request = requestObject.signed(alg, key) {
+                keyID("did:example:12345#key-1")
+            }
+
+            val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
+                clientAuthenticator.authenticateClientOverHttp(request)
+            }
+            assertTrue {
+                error.cause.contains("kid should be DID URL sub-resource")
+            }
+        }
+
+        @Test
+        fun `if kid uses registrable name extension of victim DID, authentication fails`() = runTest {
+            val (alg, key) = algAndKey
+
+            // Attack: kid uses did:web:verifier.example.com.attacker.net#key-1
+            // while client_id is did:web:verifier.example.com
+            val victimClientId = DID.parse("did:web:verifier.example.com").getOrThrow()
+            val victimRequestObject = UnvalidatedRequestObject(
+                clientId = "decentralized_identifier:$victimClientId",
+            )
+            val attackKid = "did:web:verifier.example.com.attacker.net#key-1"
+
+            val request = victimRequestObject.signed(alg, key) { keyID(attackKid) }
+
+            val error = assertFailsWithError<RequestValidationError.InvalidJarJwt> {
+                clientAuthenticator.authenticateClientOverHttp(request)
+            }
+            assertTrue {
+                error.cause.contains("kid should be DID URL sub-resource")
+            }
+        }
+
+        @Test
         fun `if resolution fails, authentication fails`() = runTest {
             val (alg, key) = algAndKey
             val failingResolution = LookupPublicKeyByDIDUrl { _ ->

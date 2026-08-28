@@ -319,7 +319,8 @@ private suspend fun lookupKeyByDID(
             invalidJarJwt("kid should be DID URL")
         }
     }
-    ensure(keyUrl.toString().startsWith(clientId.toString())) {
+    val keyDid = keyUrl.didPart()
+    ensure(keyDid == clientId) {
         invalidJarJwt("kid should be DID URL sub-resource of $clientId but is $keyUrl")
     }
     val key = runCatchingCancellable { lookupPublicKeyByDIDUrl.resolveKey(keyUrl.uri) }.getOrNull()
