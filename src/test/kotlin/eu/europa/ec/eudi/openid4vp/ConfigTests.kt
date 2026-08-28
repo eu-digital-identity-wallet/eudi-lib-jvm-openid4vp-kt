@@ -20,7 +20,9 @@ import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
 import com.nimbusds.jose.jwk.KeyUse
 import com.nimbusds.jose.jwk.gen.RSAKeyGenerator
+import eu.europa.ec.eudi.openid4vp.internal.request.AttestationIssuer
 import org.junit.jupiter.api.assertDoesNotThrow
+import java.time.Duration
 import java.util.*
 import kotlin.test.Test
 import kotlin.test.assertFailsWith
@@ -105,6 +107,51 @@ class ConfigTests {
                     "Verifier",
                     JWSAlgorithm.RS256 to JWKSet(privateJwk),
                 ),
+            )
+        }
+    }
+
+    @Test
+    fun `SignedRequestConfiguration clockSkew must not exceed 60 seconds`() {
+        assertDoesNotThrow {
+            SignedRequestConfiguration(
+                supportedAlgorithms = JWSAlgorithm.Family.EC.toList(),
+                clockSkew = Duration.ofSeconds(15L),
+            )
+        }
+        assertDoesNotThrow {
+            SignedRequestConfiguration(
+                supportedAlgorithms = JWSAlgorithm.Family.EC.toList(),
+                clockSkew = Duration.ofSeconds(60L),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SignedRequestConfiguration(
+                supportedAlgorithms = JWSAlgorithm.Family.EC.toList(),
+                clockSkew = Duration.ofSeconds(61L),
+            )
+        }
+    }
+
+    @Test
+    fun `VerifierAttestation clockSkew must not exceed 60 seconds`() {
+        val verifier = AttestationIssuer.verifier
+        assertDoesNotThrow {
+            SupportedClientIdPrefix.VerifierAttestation(
+                trust = verifier,
+                clockSkew = Duration.ofSeconds(15L),
+            )
+        }
+        assertDoesNotThrow {
+            SupportedClientIdPrefix.VerifierAttestation(
+                trust = verifier,
+                clockSkew = Duration.ofSeconds(60L),
+            )
+        }
+        assertFailsWith<IllegalArgumentException> {
+            SupportedClientIdPrefix.VerifierAttestation(
+                trust = verifier,
+                clockSkew = Duration.ofSeconds(61L),
             )
         }
     }
