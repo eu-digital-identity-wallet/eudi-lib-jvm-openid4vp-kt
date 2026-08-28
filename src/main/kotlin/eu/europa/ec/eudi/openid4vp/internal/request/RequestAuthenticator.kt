@@ -36,7 +36,6 @@ import eu.europa.ec.eudi.openid4vp.RequestValidationError.NoMatchingClientPrefix
 import eu.europa.ec.eudi.openid4vp.SupportedClientIdPrefix.Preregistered
 import eu.europa.ec.eudi.openid4vp.internal.*
 import eu.europa.ec.eudi.openid4vp.internal.JwsJson.Companion.flatten
-import eu.europa.ec.eudi.openid4vp.internal.request.AuthenticatedClient.*
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.withContext
@@ -130,7 +129,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
      */
     suspend fun authenticateClientOverDCApi(origin: String, request: ReceivedRequest): Pair<AuthenticatedClient, SignedJWT?> =
         when (request) {
-            is ReceivedRequest.Unsigned -> Origin(origin) to null
+            is ReceivedRequest.Unsigned -> AuthenticatedClient.Origin(origin) to null
 
             is ReceivedRequest.Signed -> {
                 val signedJwt = request.jwsJson.toSignedJwt()
@@ -221,7 +220,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
             }
             val originalClientIdAsUri =
                 originalClientId.asHttpsURI { RequestValidationError.InvalidClientId.asException() }.getOrThrow()
-            RedirectUri(originalClientIdAsUri)
+            AuthenticatedClient.RedirectUri(originalClientIdAsUri)
         }
 
         is SupportedClientIdPrefix.X509SanDns -> {
@@ -236,7 +235,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
                 invalidJarJwt("ClientId not found in certificate's subject alternative names")
             }
 
-            X509SanDns(originalClientId, chain)
+            AuthenticatedClient.X509SanDns(originalClientId, chain)
         }
 
         is SupportedClientIdPrefix.DecentralizedIdentifier -> {
@@ -247,7 +246,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
                 RequestValidationError.InvalidClientId.asException()
             }
             val clientPubKey = lookupKeyByDID(signedRequest, originalClientIdAsDID, clientIdPrefix.lookup)
-            DecentralizedIdentifier(originalClientIdAsDID, clientPubKey)
+            AuthenticatedClient.DecentralizedIdentifier(originalClientIdAsDID, clientPubKey)
         }
 
         is SupportedClientIdPrefix.VerifierAttestation -> {
@@ -256,7 +255,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
             }
             val attestedClaims =
                 verifierAttestation(openId4VPConfig.clock, clientIdPrefix, signedRequest, originalClientId)
-            VerifierAttestation(originalClientId, attestedClaims)
+            AuthenticatedClient.VerifierAttestation(originalClientId, attestedClaims)
         }
 
         is SupportedClientIdPrefix.X509Hash -> {
@@ -272,7 +271,7 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
                 invalidJarJwt("ClientId does not match leaf certificate's SHA-256 hash")
             }
 
-            X509Hash(originalClientId, chain)
+            AuthenticatedClient.X509Hash(originalClientId, chain)
         }
     }
 
@@ -293,9 +292,16 @@ internal class ClientAuthenticator(private val openId4VPConfig: OpenId4VPConfig)
     ): List<X509Certificate> {
         val x5c = requestJwt.header?.x509CertChain
         ensureNotNull(x5c) { invalidJarJwt("Missing x5c") }
-        val pubCertChain = x5c.mapNotNull { runCatchingCancellable { X509CertUtils.parse(it.decode()) }.getOrNull() }
+        val pubCertChain = runCatchingCancellable {
+            x5c.map { X509CertUtils.parseWithException(it.decode()) }
+        }.getOrElse { ex ->
+            throw invalidJarJwt("Invalid x5c: ${ex.message}")
+        }
         ensure(pubCertChain.isNotEmpty()) { invalidJarJwt("Invalid x5c") }
-        ensure(trust.isTrusted(pubCertChain)) { invalidJarJwt("Untrusted x5c") }
+        val isTrusted = runCatchingCancellable { trust.isTrusted(pubCertChain) }.getOrElse { ex ->
+            throw invalidJarJwt("Untrusted x5c. $ex")
+        }
+        ensure(isTrusted) { invalidJarJwt("Untrusted x5c") }
         return pubCertChain
     }
 }
@@ -345,7 +351,9 @@ private fun verifierAttestation(
             invalidVerifierAttestationJwt("typ is not $expectedType ")
         }
         parsedJwt.apply {
-            runCatchingCancellable { verify(trust) }.getOrElse { throw invalidVerifierAttestationJwt("Not trusted. $it") }
+            val isTrusted = runCatchingCancellable { verify(trust) }
+                .getOrElse { throw invalidVerifierAttestationJwt("Not trusted. $it") }
+            ensure(isTrusted) { invalidVerifierAttestationJwt("Not trusted") }
         }
     }
 
