@@ -345,7 +345,9 @@ private fun verifierAttestation(
             invalidVerifierAttestationJwt("typ is not $expectedType ")
         }
         parsedJwt.apply {
-            runCatchingCancellable { verify(trust) }.getOrElse { throw invalidVerifierAttestationJwt("Not trusted. $it") }
+            val isTrusted = runCatchingCancellable { verify(trust) }
+                .getOrElse { throw invalidVerifierAttestationJwt("Not trusted. $it") }
+            ensure(isTrusted) { invalidVerifierAttestationJwt("Not trusted") }
         }
     }
 
