@@ -15,6 +15,8 @@
  */
 package eu.europa.ec.eudi.openid4vp
 
+import com.nimbusds.jose.EncryptionMethod
+import com.nimbusds.jose.JWEAlgorithm
 import com.nimbusds.jose.JWSAlgorithm
 import com.nimbusds.jose.jwk.JWK
 import com.nimbusds.jose.jwk.JWKSet
@@ -152,6 +154,68 @@ class ConfigTests {
             SupportedClientIdPrefix.VerifierAttestation(
                 trust = verifier,
                 clockSkew = Duration.ofSeconds(61L),
+            )
+        }
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `ResponseEncryptionConfiguration_Supported rejects RSA1_5`() {
+        assertFailsWith<IllegalArgumentException> {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.RSA1_5),
+                supportedMethods = listOf(EncryptionMethod.A256GCM),
+            )
+        }
+    }
+
+    @Test
+    @Suppress("DEPRECATION")
+    fun `ResponseEncryptionConfiguration_Supported rejects RSA_OAEP`() {
+        assertFailsWith<IllegalArgumentException> {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.RSA_OAEP),
+                supportedMethods = listOf(EncryptionMethod.A256GCM),
+            )
+        }
+    }
+
+    @Test
+    fun `ResponseEncryptionConfiguration_Supported accepts RSA_OAEP_256`() {
+        assertDoesNotThrow {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.RSA_OAEP_256),
+                supportedMethods = listOf(EncryptionMethod.A256GCM),
+            )
+        }
+    }
+
+    @Test
+    fun `ResponseEncryptionConfiguration_Supported accepts ECDH_ES`() {
+        assertDoesNotThrow {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
+                supportedMethods = listOf(EncryptionMethod.A256GCM),
+            )
+        }
+    }
+
+    @Test
+    fun `ResponseEncryptionConfiguration_Supported rejects empty algorithms`() {
+        assertFailsWith<IllegalArgumentException> {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = emptyList(),
+                supportedMethods = listOf(EncryptionMethod.A256GCM),
+            )
+        }
+    }
+
+    @Test
+    fun `ResponseEncryptionConfiguration_Supported rejects empty methods`() {
+        assertFailsWith<IllegalArgumentException> {
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
+                supportedMethods = emptyList(),
             )
         }
     }

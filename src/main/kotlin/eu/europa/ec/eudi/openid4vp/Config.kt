@@ -226,6 +226,19 @@ sealed interface ResponseEncryptionConfiguration {
         init {
             require(supportedAlgorithms.isNotEmpty()) { "At least an encryption algorithm must be provided" }
             require(supportedMethods.isNotEmpty()) { "At least an encryption method must be provided" }
+            supportedAlgorithms.forEach { alg ->
+                require(alg !in REJECTED_ALGORITHMS) {
+                    "JWEAlgorithm ${alg.name} is not supported: deprecated algorithms ${REJECTED_ALGORITHMS.map { it.name }}"
+                }
+            }
+        }
+
+        companion object {
+            @Suppress("DEPRECATION")
+            private val REJECTED_ALGORITHMS: Set<JWEAlgorithm> = setOf(
+                JWEAlgorithm.RSA1_5,
+                JWEAlgorithm.RSA_OAEP,
+            )
         }
     }
 
