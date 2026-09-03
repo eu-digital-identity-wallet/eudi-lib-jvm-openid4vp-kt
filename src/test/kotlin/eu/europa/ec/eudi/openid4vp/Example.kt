@@ -174,6 +174,7 @@ class Verifier private constructor(
                     }
                 }
                 put("request_uri_method", "post")
+                put("intended_use_id", "TEST-01")
             }
             return initTransaction(client, verifierApi, request)
         }
