@@ -91,7 +91,7 @@ suspend fun HttpClient.program() {
         when (val dispatchOutcome = wallet.handle(verifier.authorizationRequestUri)) {
             is DispatchOutcome.RedirectURI -> error("Unexpected")
             is DispatchOutcome.VerifierResponse.Accepted -> verifier.getWalletResponse(dispatchOutcome)
-            DispatchOutcome.VerifierResponse.Rejected -> error("Unexpected failure")
+            is DispatchOutcome.VerifierResponse.Rejected -> error("Unexpected failure")
         }
     }
 

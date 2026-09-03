@@ -19,7 +19,9 @@ import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.*
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.expectSuccess
 import io.ktor.client.request.*
+import io.ktor.client.statement.HttpResponse
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.utils.io.*
@@ -83,28 +85,33 @@ internal class DefaultDispatcherOverHttp(
         url: URL,
         parameters: Parameters,
     ): DispatchOutcome.VerifierResponse {
-        val response = httpClient.post(url.toExternalForm()) {
-            body = FormData(parameters)
-        }
-
-        return when (response.status) {
-            HttpStatusCode.OK -> {
-                val redirectUri =
-                    try {
-                        response.body<JsonObject?>()
-                            ?.get("redirect_uri")
-                            ?.takeIf { it is JsonPrimitive }
-                            ?.jsonPrimitive?.contentOrNull
-                            ?.let { URI.create(it) }
-                    } catch (_: NoTransformationFoundException) {
-                        null
-                    }
-                DispatchOutcome.VerifierResponse.Accepted(redirectUri)
+        val response =
+            httpClient.post(url.toExternalForm()) {
+                expectSuccess = false
+                body = FormData(parameters)
             }
-
-            else -> DispatchOutcome.VerifierResponse.Rejected
+        val redirectUri = response.parseRedirectUri()
+        return when {
+            response.status.isSuccess() -> DispatchOutcome.VerifierResponse.Accepted(redirectUri)
+            else -> DispatchOutcome.VerifierResponse.Rejected(redirectUri)
         }
     }
+
+    /**
+     * Extracts the optional `redirect_uri` returned by the verifier in the response body,
+     * as defined by OpenID4VP. The Response URI MAY return the redirect_uri parameter in
+     * response to successful Authorization Responses or for Error Responses.
+     */
+    private suspend fun HttpResponse.parseRedirectUri(): URI? =
+        try {
+            body<JsonObject?>()
+                ?.get("redirect_uri")
+                ?.takeIf { it is JsonPrimitive }
+                ?.jsonPrimitive?.contentOrNull
+                ?.let { URI.create(it) }
+        } catch (_: NoTransformationFoundException) {
+            null
+        }
 
     override suspend fun encodeRedirectURI(
         request: ResolvedRequestObject,

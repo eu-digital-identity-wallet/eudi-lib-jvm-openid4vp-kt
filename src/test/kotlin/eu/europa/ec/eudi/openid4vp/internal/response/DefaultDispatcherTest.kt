@@ -367,6 +367,71 @@ class DefaultDispatcherTest {
         }
 
         @Test
+        fun `verifier rejection with redirect_uri is reported as Rejected carrying the redirect_uri`() = runTest {
+            val verifierRequest = Verifier.createOpenId4VPRequest(
+                Verifier.metaDataRequestingEncryptedResponse,
+                ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
+            )
+            val redirectUri = URI.create("https://redirect.here")
+
+            val mockEngine = MockEngine { request ->
+                assertEquals(HttpMethod.Post, request.method)
+                val body = assertIs<FormData>(request.body)
+                assertNotNull(body.formData["response"])
+                respond(
+                    buildJsonObject { put("redirect_uri", JsonPrimitive(redirectUri.toString())) }.toString(),
+                    HttpStatusCode.BadRequest,
+                    headers { append(HttpHeaders.ContentType, ContentType.Application.Json) },
+                )
+            }
+            val httpClient = createHttpClient(mockEngine).config {
+                expectSuccess = true
+                install(ContentNegotiation) { json() }
+            }
+            val dispatcher = DefaultDispatcherOverHttp(httpClient)
+
+            val outcome = dispatcher.dispatch(
+                verifierRequest,
+                Consensus.NegativeConsensus,
+                EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
+            )
+            val rejected = assertIs<DispatchOutcome.VerifierResponse.Rejected>(outcome)
+            assertEquals(redirectUri, rejected.redirectURI)
+        }
+
+        @Test
+        fun `verifier rejection without redirect_uri is reported as Rejected with null redirect_uri`() = runTest {
+            val verifierRequest = Verifier.createOpenId4VPRequest(
+                Verifier.metaDataRequestingEncryptedResponse,
+                ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
+            )
+
+            val mockEngine = MockEngine { request ->
+                assertEquals(HttpMethod.Post, request.method)
+                val body = assertIs<FormData>(request.body)
+                assertNotNull(body.formData["response"])
+                respond(
+                    "",
+                    HttpStatusCode.BadRequest,
+                    headers { append(HttpHeaders.ContentType, ContentType.Application.Json) },
+                )
+            }
+            val httpClient = createHttpClient(mockEngine).config {
+                expectSuccess = true
+                install(ContentNegotiation) { json() }
+            }
+            val dispatcher = DefaultDispatcherOverHttp(httpClient)
+
+            val outcome = dispatcher.dispatch(
+                verifierRequest,
+                Consensus.NegativeConsensus,
+                EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
+            )
+            val rejected = assertIs<DispatchOutcome.VerifierResponse.Rejected>(outcome)
+            assertNull(rejected.redirectURI)
+        }
+
+        @Test
         fun `unencrypted errors are sent when using direct_post_jwt`() = runTest {
             val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
             val error = ResolutionError.UnknownScope(Scope.OpenId)
