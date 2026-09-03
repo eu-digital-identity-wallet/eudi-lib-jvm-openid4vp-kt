@@ -223,7 +223,7 @@ if (resolution is Resolution.Invalid) {
     when (dispatchOutcome) {
       is DispatchOutcome.RedirectURI -> TODO("Caller must redirect the user to '${dispatchOutcome.value}'")
       is DispatchOutcome.VerifierResponse.Accepted -> TODO("Verifier/RP successfully received authorization error response. Caller must redirect user to '${dispatchOutcome.redirectURI}'")
-      DispatchOutcome.VerifierResponse.Rejected -> TODO("Verifier/RP did not receive or rejected the authorization error response.")
+      is DispatchOutcome.VerifierResponse.Rejected -> TODO("Verifier/RP did not receive or rejected the authorization error response.")
     }
   }
 }
