@@ -367,6 +367,71 @@ class DefaultDispatcherTest {
         }
 
         @Test
+        fun `verifier rejection with redirect_uri is reported as Rejected carrying the redirect_uri`() = runTest {
+            val verifierRequest = Verifier.createOpenId4VPRequest(
+                Verifier.metaDataRequestingEncryptedResponse,
+                ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
+            )
+            val redirectUri = URI.create("https://redirect.here")
+
+            val mockEngine = MockEngine { request ->
+                assertEquals(HttpMethod.Post, request.method)
+                val body = assertIs<FormData>(request.body)
+                assertNotNull(body.formData["response"])
+                respond(
+                    buildJsonObject { put("redirect_uri", JsonPrimitive(redirectUri.toString())) }.toString(),
+                    HttpStatusCode.BadRequest,
+                    headers { append(HttpHeaders.ContentType, ContentType.Application.Json) },
+                )
+            }
+            val httpClient = createHttpClient(mockEngine).config {
+                expectSuccess = true
+                install(ContentNegotiation) { json() }
+            }
+            val dispatcher = DefaultDispatcherOverHttp(httpClient)
+
+            val outcome = dispatcher.dispatch(
+                verifierRequest,
+                Consensus.NegativeConsensus,
+                EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
+            )
+            val rejected = assertIs<DispatchOutcome.VerifierResponse.Rejected>(outcome)
+            assertEquals(redirectUri, rejected.redirectURI)
+        }
+
+        @Test
+        fun `verifier rejection without redirect_uri is reported as Rejected with null redirect_uri`() = runTest {
+            val verifierRequest = Verifier.createOpenId4VPRequest(
+                Verifier.metaDataRequestingEncryptedResponse,
+                ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow()),
+            )
+
+            val mockEngine = MockEngine { request ->
+                assertEquals(HttpMethod.Post, request.method)
+                val body = assertIs<FormData>(request.body)
+                assertNotNull(body.formData["response"])
+                respond(
+                    "",
+                    HttpStatusCode.BadRequest,
+                    headers { append(HttpHeaders.ContentType, ContentType.Application.Json) },
+                )
+            }
+            val httpClient = createHttpClient(mockEngine).config {
+                expectSuccess = true
+                install(ContentNegotiation) { json() }
+            }
+            val dispatcher = DefaultDispatcherOverHttp(httpClient)
+
+            val outcome = dispatcher.dispatch(
+                verifierRequest,
+                Consensus.NegativeConsensus,
+                EncryptionParameters.DiffieHellman(Base64URL.encode("dummy_apu")),
+            )
+            val rejected = assertIs<DispatchOutcome.VerifierResponse.Rejected>(outcome)
+            assertNull(rejected.redirectURI)
+        }
+
+        @Test
         fun `unencrypted errors are sent when using direct_post_jwt`() = runTest {
             val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
             val error = ResolutionError.UnknownScope(Scope.OpenId)
@@ -386,9 +451,18 @@ class DefaultDispatcherTest {
                     assertEquals("invalid_scope", body.formData["error"])
                     assertEquals("UnknownScope(scope=Scope(value=openid))", body.formData["error_description"])
                     assertEquals(state, body.formData["state"])
-                    respondOk()
+                    val responseBody = buildJsonObject { }
+                    respond(
+                        content = Json.encodeToString(responseBody),
+                        status = HttpStatusCode.OK,
+                        headers = headers {
+                            set(HttpHeaders.ContentType, "application/json")
+                        },
+                    )
                 }
-                val httpClient = HttpClient(mockEngine)
+                val httpClient = HttpClient(mockEngine) {
+                    install(ContentNegotiation) { json() }
+                }
                 DefaultDispatcherOverHttp(httpClient)
             }
 
@@ -829,65 +903,69 @@ class DefaultDispatcherTest {
         }
 
         @Test
-        fun `if response mode is dc_api jwt, positive consensus is assembled as an encrypted response embedded in JsonObject`() = runTest {
-            val dcApiDispatcher = DefaultDCApiResponseBuilder()
+        fun `if response mode is dc_api jwt, positive consensus is assembled as an encrypted response embedded in JsonObject`() =
+            runTest {
+                val dcApiDispatcher = DefaultDCApiResponseBuilder()
 
-            val state = genState()
+                val state = genState()
 
-            val query = DCQL(
-                credentials = Credentials(testCredentialQuery()),
-            )
-
-            val clientMetadataValidated =
-                ClientMetaDataValidator.validateClientMetaData(
-                    Verifier.metaDataRequestingEncryptedResponse,
-                    ResponseMode.DCApiJwt,
-                    query,
-                    Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpFormatsSupported,
+                val query = DCQL(
+                    credentials = Credentials(testCredentialQuery()),
                 )
 
-            val resolvedRequestObject = createResolvedRequestObject(
-                validatedClientMetaData = clientMetadataValidated,
-                query = query,
-                state = state,
-                responseMode = ResponseMode.DCApiJwt,
-            )
+                val clientMetadataValidated =
+                    ClientMetaDataValidator.validateClientMetaData(
+                        Verifier.metaDataRequestingEncryptedResponse,
+                        ResponseMode.DCApiJwt,
+                        query,
+                        Wallet.config.responseEncryptionConfiguration,
+                        Wallet.config.vpFormatsSupported,
+                    )
 
-            val consensus = Consensus.PositiveConsensus(
-                VerifiablePresentations(
-                    mapOf(
-                        QueryId("my_credential") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
+                val resolvedRequestObject = createResolvedRequestObject(
+                    validatedClientMetaData = clientMetadataValidated,
+                    query = query,
+                    state = state,
+                    responseMode = ResponseMode.DCApiJwt,
+                )
+
+                val consensus = Consensus.PositiveConsensus(
+                    VerifiablePresentations(
+                        mapOf(
+                            QueryId("my_credential") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
+                        ),
                     ),
-                ),
-            )
+                )
 
-            val apu = "dummy_apu"
-            val dcApiResponse = dcApiDispatcher.assembleResponse(
-                resolvedRequestObject,
-                consensus,
-                EncryptionParameters.DiffieHellman(Base64URL.encode(apu)),
-            )
+                val apu = "dummy_apu"
+                val dcApiResponse = dcApiDispatcher.assembleResponse(
+                    resolvedRequestObject,
+                    consensus,
+                    EncryptionParameters.DiffieHellman(Base64URL.encode(apu)),
+                )
 
-            val response = dcApiResponse.get("response")
-            assertNotNull(response)
-            assertIs<JsonPrimitive>(response)
+                val response = dcApiResponse.get("response")
+                assertNotNull(response)
+                assertIs<JsonPrimitive>(response)
 
-            val encryptedResponse = response.content.assertIsJwtEncryptedWithVerifiersPublicKey()
-            assertEquals(Base64URL.encode(resolvedRequestObject.nonce), encryptedResponse.header.agreementPartyVInfo)
-            assertEquals(Base64URL.encode(apu), encryptedResponse.header.agreementPartyUInfo)
+                val encryptedResponse = response.content.assertIsJwtEncryptedWithVerifiersPublicKey()
+                assertEquals(
+                    Base64URL.encode(resolvedRequestObject.nonce),
+                    encryptedResponse.header.agreementPartyVInfo,
+                )
+                assertEquals(Base64URL.encode(apu), encryptedResponse.header.agreementPartyUInfo)
 
-            val vpTokenJO = encryptedResponse.jwtClaimsSet.getJSONObjectClaim("vp_token")
-            assertNotNull(vpTokenJO)
+                val vpTokenJO = encryptedResponse.jwtClaimsSet.getJSONObjectClaim("vp_token")
+                assertNotNull(vpTokenJO)
 
-            val queryIdResponse = vpTokenJO.get("my_credential")
-            assertNotNull(queryIdResponse)
-            assertIs<List<String>>(queryIdResponse)
+                val queryIdResponse = vpTokenJO.get("my_credential")
+                assertNotNull(queryIdResponse)
+                assertIs<List<String>>(queryIdResponse)
 
-            val stateInResponse = encryptedResponse.jwtClaimsSet.getStringClaim("state")
-            assertNotNull(stateInResponse)
-            assertEquals(state, stateInResponse)
-        }
+                val stateInResponse = encryptedResponse.jwtClaimsSet.getStringClaim("state")
+                assertNotNull(stateInResponse)
+                assertEquals(state, stateInResponse)
+            }
 
         @Test
         fun `if response dc_api, negative consensus is assembled as JsonObject`() = runTest {
