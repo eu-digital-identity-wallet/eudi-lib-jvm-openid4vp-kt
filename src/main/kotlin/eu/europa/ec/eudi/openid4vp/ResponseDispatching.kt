@@ -65,10 +65,12 @@ sealed interface DispatchOutcome : java.io.Serializable {
 
         /**
          * When verifier/RP reject the direct post
+         *
+         * @property redirectURI OPTIONAL. A URI provided by the verifier to which the wallet must
+         * redirect the user agent, as defined by OpenID4VP. The Response URI MAY return the
+         * redirect_uri parameter in response to error responses.
          */
-        data object Rejected : VerifierResponse {
-            private fun readResolve(): Any = Rejected
-        }
+        data class Rejected(val redirectURI: URI?) : VerifierResponse
     }
 }
 

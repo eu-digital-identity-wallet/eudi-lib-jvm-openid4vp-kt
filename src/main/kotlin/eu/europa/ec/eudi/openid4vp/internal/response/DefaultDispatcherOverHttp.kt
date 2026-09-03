@@ -19,7 +19,9 @@ import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.*
 import io.ktor.client.*
 import io.ktor.client.call.*
+import io.ktor.client.plugins.*
 import io.ktor.client.request.*
+import io.ktor.client.statement.*
 import io.ktor.http.*
 import io.ktor.http.content.*
 import io.ktor.utils.io.*
@@ -83,26 +85,42 @@ internal class DefaultDispatcherOverHttp(
         url: URL,
         parameters: Parameters,
     ): DispatchOutcome.VerifierResponse {
-        val response = httpClient.post(url.toExternalForm()) {
-            body = FormData(parameters)
-        }
-
-        return when (response.status) {
-            HttpStatusCode.OK -> {
-                val redirectUri =
-                    try {
-                        response.body<JsonObject?>()
-                            ?.get("redirect_uri")
-                            ?.takeIf { it is JsonPrimitive }
-                            ?.jsonPrimitive?.contentOrNull
-                            ?.let { URI.create(it) }
-                    } catch (_: NoTransformationFoundException) {
-                        null
-                    }
-                DispatchOutcome.VerifierResponse.Accepted(redirectUri)
+        val response =
+            httpClient.post(url.toExternalForm()) {
+                expectSuccess = false
+                body = FormData(parameters)
             }
+        val redirectUri = response.parseRedirectUri()
+        return when {
+            response.status.isSuccess() -> DispatchOutcome.VerifierResponse.Accepted(redirectUri)
+            else -> DispatchOutcome.VerifierResponse.Rejected(redirectUri)
+        }
+    }
 
-            else -> DispatchOutcome.VerifierResponse.Rejected
+    /**
+     * Extracts the optional `redirect_uri` returned by the verifier in the response body,
+     * as defined by OpenID4VP. The Response URI MAY return the redirect_uri parameter in
+     * response to successful Authorization Responses or for Error Responses.
+     */
+    @Throws(IllegalArgumentException::class)
+    private suspend fun HttpResponse.parseRedirectUri(): URI? {
+        val body = runCatchingCancellable { body<JsonObject?>() }.getOrElse { ex ->
+            val exceptionToRaise = when (ex) {
+                is IllegalArgumentException -> ex
+                is NoTransformationFoundException -> IllegalStateException("Http client doesn't seem to support content negotiation", ex)
+                else -> IllegalArgumentException("Failed to parse Verifier response", ex)
+            }
+            throw exceptionToRaise
+        }
+        return body?.let { response ->
+            response["redirect_uri"]?.let { redirectUri ->
+                require(redirectUri is JsonPrimitive && redirectUri.isString) {
+                    "Verifier sent a redirect_uri that is not a string"
+                }
+                runCatchingCancellable { URI.create(redirectUri.content) }.getOrElse { ex ->
+                    throw IllegalArgumentException("Verifier sent a redirect_uri that is not a valid URI", ex)
+                }
+            }
         }
     }
 
