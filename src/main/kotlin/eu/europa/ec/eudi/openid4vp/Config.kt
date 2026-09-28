@@ -180,6 +180,10 @@ sealed interface SupportedTransactionDataType {
             require(HashAlgorithm.SHA_256 in hashAlgorithms) { "'${HashAlgorithm.SHA_256.name}' must be a supported hash algorithm" }
         }
     }
+
+    data class MsoMdoc(
+        override val type: TransactionDataType,
+    ) : SupportedTransactionDataType
 }
 
 /**

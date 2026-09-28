@@ -17,6 +17,8 @@ package eu.europa.ec.eudi.openid4vp.internal.request
 
 import eu.europa.ec.eudi.openid4vp.*
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.*
+import eu.europa.ec.eudi.openid4vp.SupportedTransactionDataType.MsoMdoc
+import eu.europa.ec.eudi.openid4vp.SupportedTransactionDataType.SdJwtVc
 import eu.europa.ec.eudi.openid4vp.dcql.DCQL
 import eu.europa.ec.eudi.openid4vp.internal.ensure
 import eu.europa.ec.eudi.openid4vp.internal.ensureNotNull
@@ -389,20 +391,32 @@ private fun ResponseMode.uri(): URI = when (this) {
 
 private fun TransactionData.ensureSupported(supportedTransactionDataTypes: List<SupportedTransactionDataType>) =
     when (this) {
-        is TransactionData.SdJwtVc -> ensureSupported(supportedTransactionDataTypes)
+        is TransactionData.SdJwtVc -> ensureSdJwtVcSupported(supportedTransactionDataTypes.ofType<SdJwtVc>())
+        is TransactionData.MsoMdoc -> ensureMsoMdocSupported(supportedTransactionDataTypes.ofType<MsoMdoc>())
     }
 
-private fun TransactionData.SdJwtVc.ensureSupported(supportedTransactionDataTypes: List<SupportedTransactionDataType>) {
+private inline fun <reified T : SupportedTransactionDataType> List<SupportedTransactionDataType>.ofType(): List<T> =
+    this.filterIsInstance<T>()
+
+private fun TransactionData.SdJwtVc.ensureSdJwtVcSupported(supportedTransactionDataTypes: List<SdJwtVc>) {
     val type = this.type
 
     val supportedType = supportedTransactionDataTypes.firstOrNull { it.type == type }
-    require(supportedType is SupportedTransactionDataType.SdJwtVc) {
-        "Unsupported Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_TYPE}': '$type'"
+    requireNotNull(supportedType) {
+        "Unsupported sd-jwt-vc Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_TYPE}': '$type'"
     }
 
     val hashAlgorithms = this.hashAlgorithmsOrDefault
     val supportedHashAlgorithms = supportedType.hashAlgorithms
     require(supportedHashAlgorithms.intersect(hashAlgorithms).isNotEmpty()) {
-        "Unsupported Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS}': '$hashAlgorithms'"
+        "Unsupported sd-jwt-vc Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS}': '$hashAlgorithms'"
+    }
+}
+
+private fun TransactionData.MsoMdoc.ensureMsoMdocSupported(supportedTransactionDataTypes: List<MsoMdoc>) {
+    val type = this.type
+    val supportedType = supportedTransactionDataTypes.firstOrNull { it.type == type }
+    requireNotNull(supportedType) {
+        "Unsupported mso-mdoc Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_TYPE}': '$type'"
     }
 }
