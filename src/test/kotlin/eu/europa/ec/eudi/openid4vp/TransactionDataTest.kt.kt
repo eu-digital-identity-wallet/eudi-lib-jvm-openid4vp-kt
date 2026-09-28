@@ -231,7 +231,7 @@ class TransactionDataTest {
             val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
             val cause = assertIs<IllegalArgumentException>(error.cause)
             assertEquals(
-                "Unsupported Transaction Data 'type': 'unsupported'",
+                "Unsupported sd-jwt-vc Transaction Data 'type': 'unsupported'",
                 cause.message,
             )
         }
@@ -370,7 +370,7 @@ class TransactionDataTest {
             val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
             val cause = assertIs<IllegalArgumentException>(error.cause)
             assertEquals(
-                "Unsupported Transaction Data 'transaction_data_hashes_alg': '[sha-512]'",
+                "Unsupported sd-jwt-vc Transaction Data 'transaction_data_hashes_alg': '[sha-512]'",
                 cause.message,
             )
         }
@@ -469,8 +469,24 @@ class TransactionDataTest {
     }
 
     @Test
-    fun `if transaction_data format is not supported, resolution fails`() = runTest {
+    fun `if sd-jwt-vc transaction_data type is not supported, resolution fails`() = runTest {
         val transactionData = TransactionData.sdJwtVc(
+            TransactionDataType("sd-jwt-transaction-data"),
+            listOf(QueryId("my_credential_1")),
+        )
+        testAndThen(transactionData.json, queryWithMultipleCredentials) {
+            val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
+            val cause = assertIs<IllegalArgumentException>(error.cause)
+            assertEquals(
+                "Unsupported sd-jwt-vc Transaction Data 'type': 'sd-jwt-transaction-data'",
+                cause.message,
+            )
+        }
+    }
+
+    @Test
+    fun `if mso-mdoc transaction_data type is not supported, resolution fails`() = runTest {
+        val transactionData = TransactionData.msoMdoc(
             TransactionDataType("basic-transaction-data"),
             listOf(QueryId("my_credential_2")),
         )
@@ -478,7 +494,7 @@ class TransactionDataTest {
             val error = it.assertIsInvalid<ResolutionError.InvalidTransactionData>()
             val cause = assertIs<IllegalArgumentException>(error.cause)
             assertEquals(
-                "Unsupported Transaction Data Format 'mso_mdoc'",
+                "Unsupported mso-mdoc Transaction Data 'type': 'basic-transaction-data'",
                 cause.message,
             )
         }

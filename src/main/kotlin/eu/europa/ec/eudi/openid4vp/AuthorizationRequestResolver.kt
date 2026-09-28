@@ -137,6 +137,7 @@ sealed interface TransactionData : java.io.Serializable {
             val format = credentialFormats.first()
             when (format) {
                 Format.SdJwtVc -> SdJwtVc(value)
+                Format.MsoMdoc -> MsoMdoc(value)
                 else -> throw IllegalArgumentException("Unsupported Transaction Data Format '$format'")
             }
         }
@@ -147,6 +148,12 @@ sealed interface TransactionData : java.io.Serializable {
             hashAlgorithms: List<HashAlgorithm>? = null,
             builder: JsonObjectBuilder.() -> Unit = {},
         ): SdJwtVc = SdJwtVc(type, credentialIds, hashAlgorithms, builder)
+
+        fun msoMdoc(
+            type: TransactionDataType,
+            credentialIds: List<QueryId>,
+            builder: JsonObjectBuilder.() -> Unit = {},
+        ): MsoMdoc = MsoMdoc(type, credentialIds, builder)
     }
 
     /**
@@ -201,6 +208,44 @@ sealed interface TransactionData : java.io.Serializable {
                 val base64 = base64UrlNoPadding.encode(serialized.encodeToByteArray())
 
                 return SdJwtVc(base64)
+            }
+        }
+    }
+
+    /**
+     * Represents transaction data of type MSO_MDoc, encapsulated in a Base64UrlSafe formatted value.
+     */
+    data class MsoMdoc internal constructor(override val value: Base64UrlSafe) : TransactionData {
+        override val json: JsonObject by lazy { decode(value) }
+        override val type: TransactionDataType get() = json.type()
+        override val credentialIds: List<QueryId> get() = json.credentialIds()
+
+        init {
+            require(credentialIds.isNotEmpty()) {
+                "Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS}' must not be empty'"
+            }
+        }
+
+        companion object {
+
+            operator fun invoke(
+                type: TransactionDataType,
+                credentialIds: List<QueryId>,
+                builder: JsonObjectBuilder.() -> Unit = {},
+            ): MsoMdoc {
+                val json = buildJsonObject {
+                    builder()
+
+                    put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, type.value)
+                    putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
+                        credentialIds.forEach { add(it.value) }
+                    }
+                }
+
+                val serialized = jsonSupport.encodeToString(json)
+                val base64 = base64UrlNoPadding.encode(serialized.encodeToByteArray())
+
+                return MsoMdoc(base64)
             }
         }
     }
