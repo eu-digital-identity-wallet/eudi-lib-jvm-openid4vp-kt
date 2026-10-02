@@ -35,11 +35,11 @@ jobs:
         with:
           distribution: temurin
           java-version: '17'
-      - uses: gradle/actions/setup-gradle@v6.3.0
+      - uses: gradle/actions/setup-gradle@v6.4.0
         with:
           cache-provider: basic
       - run: ./gradlew clean test koverXmlReport
-      - uses: sonarsource/sonarqube-scan-action@v8.2.2
+      - uses: sonarsource/sonarqube-scan-action@v8.3.0
         if: (github.event_name == 'push'|| github.event_name == 'workflow_dispatch')
         with:
           projectBaseDir: ${{ github.workspace }}
@@ -55,7 +55,7 @@ jobs:
             -Dsonar.tests=src/test
             -Dsonar.java.binaries=build/classes/kotlin/main
             -Dsonar.kotlin.binaries=build/classes/kotlin/main
-      - uses: sonarsource/sonarqube-scan-action@v8.2.2
+      - uses: sonarsource/sonarqube-scan-action@v8.3.0
         if: (github.event_name == 'pull_request_target')
         with:
           projectBaseDir: ${{ github.workspace }}
