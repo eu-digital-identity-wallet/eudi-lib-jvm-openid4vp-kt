@@ -11,7 +11,6 @@ ktlint = "0.50.0"
 dokka = "2.2.0"
 maven-publish = "0.35.0"
 kover = "0.9.8"
-dependency-check = "12.2.0"
 tink = "1.21.0"
 logback = "1.5.32"
 kotlinx-datetime = "0.7.1-0.6.x-compat"
@@ -47,4 +46,3 @@ spotless = { id = "com.diffplug.spotless", version.ref = "spotless" }
 kover = { id = "org.jetbrains.kotlinx.kover", version.ref = "kover" }
 dokka = { id = "org.jetbrains.dokka", version.ref = "dokka" }
 maven-publish = { id = "com.vanniktech.maven.publish", version.ref = "maven-publish" }
-dependency-check = { id = "org.owasp.dependencycheck", version.ref = "dependency-check" }
