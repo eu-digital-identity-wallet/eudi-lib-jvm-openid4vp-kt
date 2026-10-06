@@ -32,12 +32,17 @@ import java.net.URI
 import java.net.URL
 
 @JvmInline
-value class Scope private constructor(val value: String) {
-    fun items(): List<Scope> = when (value) {
-        "" -> emptyList()
-        else -> value.split(SEPARATOR).map { Scope(it) }
-    }
+value class Scope private constructor(
+    val value: String,
+) {
+    fun items(): List<Scope> =
+        when (value) {
+            "" -> emptyList()
+            else -> value.split(SEPARATOR).map { Scope(it) }
+        }
+
     operator fun plus(other: Scope): Scope = Scope("$value$SEPARATOR${other.value}")
+
     operator fun contains(other: Scope): Boolean {
         val thisFlatten = items().flatMap { it.items() }
         val otherFlatten = other.items().flatMap { it.items() }
@@ -45,17 +50,21 @@ value class Scope private constructor(val value: String) {
     }
 
     companion object {
-
         fun List<Scope>.mergeOrNull(): Scope? =
-            if (isEmpty()) null
-            else fold(EMPTY, Scope::plus)
+            if (isEmpty())
+                null
+            else
+                fold(EMPTY, Scope::plus)
 
         val OpenId = Scope("openid")
         private val EMPTY = Scope("")
         private const val SEPARATOR = " "
-        fun make(s: String): Scope? = s.trim()
-            .takeIf { trimmed -> trimmed.split(SEPARATOR).isNotEmpty() }
-            ?.let { Scope(it) }
+
+        fun make(s: String): Scope? =
+            s
+                .trim()
+                .takeIf { trimmed -> trimmed.split(SEPARATOR).isNotEmpty() }
+                ?.let { Scope(it) }
     }
 }
 
@@ -119,22 +128,24 @@ enum class ClientIdPrefix {
     /**
      * Indicates whether this Client Identifier Prefix permits signed Request Objects.
      */
-    fun permitsSignedRequestObjects(): Boolean = when (this) {
-        RedirectUri -> false
-        PreRegistered, VerifierAttestation, OpenIdFederation, DecentralizedIdentifier, X509SanDns, X509Hash, ORIGIN -> true
-    }
+    fun permitsSignedRequestObjects(): Boolean =
+        when (this) {
+            RedirectUri -> false
+            PreRegistered, VerifierAttestation, OpenIdFederation, DecentralizedIdentifier, X509SanDns, X509Hash, ORIGIN -> true
+        }
 
     companion object {
-        fun make(s: String): ClientIdPrefix? = when (s) {
-            OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI -> RedirectUri
-            OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION -> OpenIdFederation
-            OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER -> DecentralizedIdentifier
-            OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION -> VerifierAttestation
-            OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS -> X509SanDns
-            OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH -> X509Hash
-            OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN -> ORIGIN
-            else -> null
-        }
+        fun make(s: String): ClientIdPrefix? =
+            when (s) {
+                OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI -> RedirectUri
+                OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION -> OpenIdFederation
+                OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER -> DecentralizedIdentifier
+                OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION -> VerifierAttestation
+                OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS -> X509SanDns
+                OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH -> X509Hash
+                OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN -> ORIGIN
+                else -> null
+            }
     }
 }
 
@@ -152,52 +163,56 @@ data class VerifierId(
     val prefix: ClientIdPrefix,
     val originalClientId: OriginalClientId,
 ) {
-    val clientId: String = run {
-        val prefix = when (prefix) {
-            ClientIdPrefix.PreRegistered -> null
-            ClientIdPrefix.RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
-            ClientIdPrefix.OpenIdFederation -> OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION
-            ClientIdPrefix.DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
-            ClientIdPrefix.VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
-            ClientIdPrefix.X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
-            ClientIdPrefix.X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
-            ClientIdPrefix.ORIGIN -> OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN
-        }
+    val clientId: String =
+        run {
+            val prefix =
+                when (prefix) {
+                    ClientIdPrefix.PreRegistered -> null
+                    ClientIdPrefix.RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
+                    ClientIdPrefix.OpenIdFederation -> OpenId4VPSpec.CLIENT_ID_PREFIX_OPENID_FEDERATION
+                    ClientIdPrefix.DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
+                    ClientIdPrefix.VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
+                    ClientIdPrefix.X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
+                    ClientIdPrefix.X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
+                    ClientIdPrefix.ORIGIN -> OpenId4VPSpec.CLIENT_ID_PREFIX_ORIGIN
+                }
 
-        buildString {
-            if (prefix != null) {
-                append(prefix)
-                append(OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR)
+            buildString {
+                if (prefix != null) {
+                    append(prefix)
+                    append(OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR)
+                }
+                append(originalClientId)
             }
-            append(originalClientId)
         }
-    }
 
     override fun toString(): String = clientId
 
     companion object {
-        fun parse(clientId: String): Result<VerifierId> = runCatchingCancellable {
-            fun invalid(message: String): Nothing = throw IllegalArgumentException(message)
-            fun preRegistered() = VerifierId(ClientIdPrefix.PreRegistered, clientId)
+        fun parse(clientId: String): Result<VerifierId> =
+            runCatchingCancellable {
+                fun invalid(message: String): Nothing = throw IllegalArgumentException(message)
 
-            if (OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR !in clientId) {
-                preRegistered()
-            } else {
-                val parts = clientId.split(OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR, limit = 2)
-                val originalClientId = parts[1]
-                when (val prefix = ClientIdPrefix.make(parts[0])) {
-                    ClientIdPrefix.PreRegistered -> invalid("'${ClientIdPrefix.PreRegistered}' cannot be used as a Client ID prefix")
-                    ClientIdPrefix.RedirectUri -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.OpenIdFederation -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.DecentralizedIdentifier -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.VerifierAttestation -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.X509SanDns -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.X509Hash -> VerifierId(prefix, originalClientId)
-                    ClientIdPrefix.ORIGIN -> invalid("'${ClientIdPrefix.ORIGIN}' cannot be used as a Client ID prefix")
-                    null -> preRegistered()
+                fun preRegistered() = VerifierId(ClientIdPrefix.PreRegistered, clientId)
+
+                if (OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR !in clientId) {
+                    preRegistered()
+                } else {
+                    val parts = clientId.split(OpenId4VPSpec.CLIENT_ID_PREFIX_SEPARATOR, limit = 2)
+                    val originalClientId = parts[1]
+                    when (val prefix = ClientIdPrefix.make(parts[0])) {
+                        ClientIdPrefix.PreRegistered -> invalid("'${ClientIdPrefix.PreRegistered}' cannot be used as a Client ID prefix")
+                        ClientIdPrefix.RedirectUri -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.OpenIdFederation -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.DecentralizedIdentifier -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.VerifierAttestation -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.X509SanDns -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.X509Hash -> VerifierId(prefix, originalClientId)
+                        ClientIdPrefix.ORIGIN -> invalid("'${ClientIdPrefix.ORIGIN}' cannot be used as a Client ID prefix")
+                        null -> preRegistered()
+                    }
                 }
             }
-        }
     }
 }
 
@@ -205,22 +220,37 @@ data class VerifierId(
  * @see <a href="https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html">https://openid.net/specs/oauth-v2-multiple-response-types-1_0.html</a>
  */
 sealed interface ResponseMode : java.io.Serializable {
-
     /**
      * In this mode, Authorization Response parameters are encoded
      * in the query string added to the redirect_uri when redirecting back to the Client.
      */
-    data class Query(val redirectUri: URI) : ResponseMode
-    data class QueryJwt(val redirectUri: URI) : ResponseMode
+    data class Query(
+        val redirectUri: URI,
+    ) : ResponseMode
+
+    data class QueryJwt(
+        val redirectUri: URI,
+    ) : ResponseMode
 
     /**
      * In this mode, Authorization Response parameters
      * are encoded in the fragment added to the redirect_uri when redirecting back to the Client.
      */
-    data class Fragment(val redirectUri: URI) : ResponseMode
-    data class FragmentJwt(val redirectUri: URI) : ResponseMode
-    data class DirectPost(val responseURI: URL) : ResponseMode
-    data class DirectPostJwt(val responseURI: URL) : ResponseMode
+    data class Fragment(
+        val redirectUri: URI,
+    ) : ResponseMode
+
+    data class FragmentJwt(
+        val redirectUri: URI,
+    ) : ResponseMode
+
+    data class DirectPost(
+        val responseURI: URL,
+    ) : ResponseMode
+
+    data class DirectPostJwt(
+        val responseURI: URL,
+    ) : ResponseMode
 
     data object DCApi : ResponseMode {
         private fun readResolve(): Any = DCApi
@@ -246,16 +276,21 @@ internal fun ResponseMode.requiresEncryption() =
 typealias Jwt = String
 
 sealed interface VerifiablePresentation {
+    @JvmInline
+    value class Generic(
+        val value: String,
+    ) : VerifiablePresentation
 
     @JvmInline
-    value class Generic(val value: String) : VerifiablePresentation
-
-    @JvmInline
-    value class JsonObj(val value: JsonObject) : VerifiablePresentation
+    value class JsonObj(
+        val value: JsonObject,
+    ) : VerifiablePresentation
 }
 
 @JvmInline
-value class VerifiablePresentations(val value: Map<QueryId, List<VerifiablePresentation>>) {
+value class VerifiablePresentations(
+    val value: Map<QueryId, List<VerifiablePresentation>>,
+) {
     init {
         require(value.isNotEmpty())
         require(value.values.all { it.isNotEmpty() })
@@ -277,7 +312,9 @@ data class ResponseEncryptionSpecification(
 }
 
 sealed interface EncryptionParameters : java.io.Serializable {
-    data class DiffieHellman(val apu: Base64URL) : EncryptionParameters
+    data class DiffieHellman(
+        val apu: Base64URL,
+    ) : EncryptionParameters
 }
 
 /**
@@ -286,7 +323,9 @@ sealed interface EncryptionParameters : java.io.Serializable {
  * @see <a href="https://www.iana.org/assignments/named-information/named-information.xhtml">https://www.iana.org/assignments/named-information/named-information.xhtml</a>
  */
 @JvmInline
-value class HashAlgorithm(val name: String) : java.io.Serializable {
+value class HashAlgorithm(
+    val name: String,
+) : java.io.Serializable {
     init {
         require(name.isNotEmpty())
     }
@@ -299,7 +338,9 @@ value class HashAlgorithm(val name: String) : java.io.Serializable {
 }
 
 @JvmInline
-value class TransactionDataType(val value: String) : java.io.Serializable {
+value class TransactionDataType(
+    val value: String,
+) : java.io.Serializable {
     init {
         require(value.isNotEmpty())
     }
@@ -309,7 +350,9 @@ value class TransactionDataType(val value: String) : java.io.Serializable {
 
 @JvmInline
 @Serializable
-value class CoseAlgorithm(val value: Int) : java.io.Serializable {
+value class CoseAlgorithm(
+    val value: Int,
+) : java.io.Serializable {
     override fun toString(): String = value.toString()
 }
 
@@ -318,7 +361,6 @@ data class VpFormatsSupported(
     @SerialName(OpenId4VPSpec.FORMAT_SD_JWT_VC) val sdJwtVc: SdJwtVc? = null,
     @SerialName(OpenId4VPSpec.FORMAT_MSO_MDOC) val msoMdoc: MsoMdoc? = null,
 ) : java.io.Serializable {
-
     init {
         require(null != sdJwtVc || null != msoMdoc) {
             "At least one format must be specified."
@@ -331,10 +373,8 @@ data class VpFormatsSupported(
     data class SdJwtVc(
         @SerialName(OpenId4VPSpec.SD_JWT_VC_SD_JWT_ALGORITHMS)
         val sdJwtAlgorithms: List<JWSAlgorithm>? = null,
-
         @SerialName(OpenId4VPSpec.SD_JWT_VC_KB_JWT_ALGORITHMS)
         val kbJwtAlgorithms: List<JWSAlgorithm>? = null,
-
     ) : java.io.Serializable {
         init {
             sdJwtAlgorithms?.let {

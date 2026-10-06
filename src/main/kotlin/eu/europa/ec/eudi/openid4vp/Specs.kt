@@ -19,7 +19,6 @@ package eu.europa.ec.eudi.openid4vp
  * [OpenId For Verifiable presentations](https://openid.net/specs/openid-4-verifiable-presentations-1_0.html)
  */
 object OpenId4VPSpec {
-
     const val RESPONSE_URI: String = "response_uri"
     const val DCQL_QUERY: String = "dcql_query"
     const val NONCE: String = "nonce"

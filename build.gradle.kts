@@ -69,14 +69,16 @@ kotlin {
     }
     compilerOptions {
         apiVersion = KotlinVersion.DEFAULT
-        optIn = listOf(
-            "kotlinx.serialization.ExperimentalSerializationApi",
-            "kotlin.contracts.ExperimentalContracts",
-            "kotlin.io.encoding.ExperimentalEncodingApi",
-        )
-        freeCompilerArgs = listOf(
-            "-Xconsistent-data-class-copy-visibility",
-        )
+        optIn =
+            listOf(
+                "kotlinx.serialization.ExperimentalSerializationApi",
+                "kotlin.contracts.ExperimentalContracts",
+                "kotlin.io.encoding.ExperimentalEncodingApi",
+            )
+        freeCompilerArgs =
+            listOf(
+                "-Xconsistent-data-class-copy-visibility",
+            )
     }
 }
 
@@ -145,6 +147,6 @@ dependencyCheck {
     formats = mutableListOf("XML", "HTML")
 
     nvd {
-        apiKey = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString() ?: ""
+        apiKey = System.getenv("NVD_API_KEY") ?: findProperty("nvdApiKey")?.toString() ?: ""
     }
 }

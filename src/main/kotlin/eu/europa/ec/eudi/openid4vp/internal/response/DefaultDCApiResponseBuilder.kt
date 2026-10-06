@@ -24,7 +24,6 @@ import kotlinx.serialization.json.buildJsonObject
  * Default implementation of [DCApiResponseBuilder]
  */
 internal class DefaultDCApiResponseBuilder : DCApiResponseBuilder {
-
     override suspend fun assembleResponse(
         request: ResolvedRequestObject,
         consensus: Consensus,
@@ -41,23 +40,28 @@ internal class DefaultDCApiResponseBuilder : DCApiResponseBuilder {
         return doAssemble(response)
     }
 
-    override fun assembleErrorResponse(
-        error: AuthorizationRequestError,
-    ): JsonObject = buildJsonObject {
-        val errorCode = AuthorizationRequestErrorCode.fromError(error)
-        put("error", JsonPrimitive(errorCode.code))
-    }
-
-    private fun doAssemble(response: AuthorizationResponse): JsonObject = when (response) {
-        is AuthorizationResponse.DCApi ->
-            response.data.asJsonObject()
-
-        is AuthorizationResponse.DCApiJwt -> buildJsonObject {
-            put("response", JsonPrimitive(response.encryptData()))
+    override fun assembleErrorResponse(error: AuthorizationRequestError): JsonObject =
+        buildJsonObject {
+            val errorCode = AuthorizationRequestErrorCode.fromError(error)
+            put("error", JsonPrimitive(errorCode.code))
         }
-        else ->
-            error("Unsupported authorization response ${response::class::simpleName} for dispatching over DC API")
-    }
+
+    private fun doAssemble(response: AuthorizationResponse): JsonObject =
+        when (response) {
+            is AuthorizationResponse.DCApi -> {
+                response.data.asJsonObject()
+            }
+
+            is AuthorizationResponse.DCApiJwt -> {
+                buildJsonObject {
+                    put("response", JsonPrimitive(response.encryptData()))
+                }
+            }
+
+            else -> {
+                error("Unsupported authorization response ${response::class::simpleName} for dispatching over DC API")
+            }
+        }
 
     private fun AuthorizationResponse.DCApiJwt.encryptData(): Jwt {
         val responseEncryptionSpecification = responseEncryptionSpecification

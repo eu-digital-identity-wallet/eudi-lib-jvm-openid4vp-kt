@@ -38,13 +38,10 @@ object TestUtilities
 
 internal val json: Json by lazy { Json { ignoreUnknownKeys = true } }
 
-internal fun load(f: String): InputStream =
-    TestUtilities::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
+internal fun load(f: String): InputStream = TestUtilities::class.java.classLoader.getResourceAsStream(f) ?: error("File $f not found")
 
 @OptIn(ExperimentalSerializationApi::class)
-internal fun readFileAsText(fileName: String): String {
-    return json.decodeFromStream<JsonObject>(load(fileName)).jsonObject.toString()
-}
+internal fun readFileAsText(fileName: String): String = json.decodeFromStream<JsonObject>(load(fileName)).jsonObject.toString()
 
 internal fun Resolution.assertIsSuccess(): ResolvedRequestObject =
     when (this) {
@@ -58,27 +55,23 @@ internal inline fun <reified T : AuthorizationRequestError> Resolution.assertIsI
         else -> fail("Success resolution found while expected Invalid")
     }
 
-internal fun randomKey(): Pair<JWSAlgorithm, ECKey> =
-    JWSAlgorithm.ES256 to ECKeyGenerator(Curve.P_256).keyUse(KeyUse.SIGNATURE).generate()
+internal fun randomKey(): Pair<JWSAlgorithm, ECKey> = JWSAlgorithm.ES256 to ECKeyGenerator(Curve.P_256).keyUse(KeyUse.SIGNATURE).generate()
 
 internal inline fun <reified E : AuthorizationRequestError> assertFailsWithError(block: () -> Unit): E {
     val exception = assertThrows<AuthorizationRequestException>(block)
     return assertIs<E>(exception.error)
 }
 
-internal fun UnvalidatedRequestObject.unsigned(): ReceivedRequest.Unsigned =
-    ReceivedRequest.Unsigned(this)
+internal fun UnvalidatedRequestObject.unsigned(): ReceivedRequest.Unsigned = ReceivedRequest.Unsigned(this)
 
-internal fun genState(): String {
-    return State().value
-}
+internal fun genState(): String = State().value
 
-internal fun validateChain(chain: List<X509Certificate>): Boolean {
-    return try {
-        for (i in chain.indices)
+internal fun validateChain(chain: List<X509Certificate>): Boolean =
+    try {
+        for (i in chain.indices) {
             if (i > 0) chain[i - 1].verify(chain[i].publicKey)
+        }
         true
     } catch (_: Exception) {
         false
     }
-}

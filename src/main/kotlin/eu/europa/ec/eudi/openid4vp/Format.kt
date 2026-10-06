@@ -19,7 +19,9 @@ import kotlinx.serialization.Serializable
 
 @Serializable
 @JvmInline
-value class Format(val value: String) {
+value class Format(
+    val value: String,
+) {
     init {
         require(value.isNotBlank()) { "Format cannot be blank" }
     }

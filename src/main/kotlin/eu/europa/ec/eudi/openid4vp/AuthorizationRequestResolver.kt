@@ -36,28 +36,51 @@ import java.security.cert.X509Certificate
  * Represents an OAuth2 RP that submitted an Authorization Request.
  */
 sealed interface Client : java.io.Serializable {
+    data class Preregistered(
+        val clientId: OriginalClientId,
+        val legalName: String,
+    ) : Client
 
-    data class Preregistered(val clientId: OriginalClientId, val legalName: String) : Client
-    data class RedirectUri(val clientId: URI) : Client
-    data class DecentralizedIdentifier(val clientId: URI) : Client
-    data class VerifierAttestation(val clientId: OriginalClientId) : Client
-    data class X509SanDns(val clientId: OriginalClientId, val cert: X509Certificate) : Client
-    data class X509Hash(val clientId: OriginalClientId, val cert: X509Certificate) : Client
-    data class Origin(val clientId: OriginalClientId) : Client
+    data class RedirectUri(
+        val clientId: URI,
+    ) : Client
+
+    data class DecentralizedIdentifier(
+        val clientId: URI,
+    ) : Client
+
+    data class VerifierAttestation(
+        val clientId: OriginalClientId,
+    ) : Client
+
+    data class X509SanDns(
+        val clientId: OriginalClientId,
+        val cert: X509Certificate,
+    ) : Client
+
+    data class X509Hash(
+        val clientId: OriginalClientId,
+        val cert: X509Certificate,
+    ) : Client
+
+    data class Origin(
+        val clientId: OriginalClientId,
+    ) : Client
 
     /**
      * The id of the client prefixed with the client id prefix.
      */
     val id: VerifierId
-        get() = when (this) {
-            is Preregistered -> VerifierId(ClientIdPrefix.PreRegistered, clientId)
-            is RedirectUri -> VerifierId(ClientIdPrefix.RedirectUri, clientId.toString())
-            is DecentralizedIdentifier -> VerifierId(ClientIdPrefix.DecentralizedIdentifier, clientId.toString())
-            is VerifierAttestation -> VerifierId(ClientIdPrefix.VerifierAttestation, clientId)
-            is X509SanDns -> VerifierId(ClientIdPrefix.X509SanDns, clientId)
-            is X509Hash -> VerifierId(ClientIdPrefix.X509Hash, clientId)
-            is Origin -> VerifierId(ClientIdPrefix.ORIGIN, clientId)
-        }
+        get() =
+            when (this) {
+                is Preregistered -> VerifierId(ClientIdPrefix.PreRegistered, clientId)
+                is RedirectUri -> VerifierId(ClientIdPrefix.RedirectUri, clientId.toString())
+                is DecentralizedIdentifier -> VerifierId(ClientIdPrefix.DecentralizedIdentifier, clientId.toString())
+                is VerifierAttestation -> VerifierId(ClientIdPrefix.VerifierAttestation, clientId)
+                is X509SanDns -> VerifierId(ClientIdPrefix.X509SanDns, clientId)
+                is X509Hash -> VerifierId(ClientIdPrefix.X509Hash, clientId)
+                is Origin -> VerifierId(ClientIdPrefix.ORIGIN, clientId)
+            }
 }
 
 /**
@@ -65,9 +88,13 @@ sealed interface Client : java.io.Serializable {
  */
 fun X509Certificate.legalName(): String? {
     val distinguishedName = X500Name(subjectX500Principal.name)
-    val commonNames = distinguishedName.getRDNs(BCStyle.CN).orEmpty().toList()
-        .flatMap { it.typesAndValues.orEmpty().toList() }
-        .map { it.value.toString() }
+    val commonNames =
+        distinguishedName
+            .getRDNs(BCStyle.CN)
+            .orEmpty()
+            .toList()
+            .flatMap { it.typesAndValues.orEmpty().toList() }
+            .map { it.value.toString() }
     return commonNames.firstOrNull { it.isNotBlank() }
 }
 
@@ -76,8 +103,8 @@ fun X509Certificate.legalName(): String? {
  *
  * @param legalName a function to extract a legal name from a [X509Certificate]. Defaults to [X509Certificate.legalName].
  */
-fun Client.legalName(legalName: X509Certificate.() -> String? = X509Certificate::legalName): String? {
-    return when (this) {
+fun Client.legalName(legalName: X509Certificate.() -> String? = X509Certificate::legalName): String? =
+    when (this) {
         is Preregistered -> this.legalName
         is RedirectUri -> null
         is DecentralizedIdentifier -> null
@@ -86,7 +113,6 @@ fun Client.legalName(legalName: X509Certificate.() -> String? = X509Certificate:
         is X509Hash -> cert.legalName()
         is Origin -> null
     }
-}
 
 typealias Base64UrlSafe = String
 
@@ -110,37 +136,44 @@ sealed interface TransactionData : java.io.Serializable {
             return jsonSupport.decodeFromString(decoded.decodeToString())
         }
 
-        private fun JsonObject.type(): TransactionDataType =
-            requiredString(OpenId4VPSpec.TRANSACTION_DATA_TYPE).let(::TransactionDataType)
+        private fun JsonObject.type(): TransactionDataType = requiredString(OpenId4VPSpec.TRANSACTION_DATA_TYPE).let(::TransactionDataType)
 
         private fun JsonObject.credentialIds(): List<QueryId> =
             requiredStringArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS).map(::QueryId)
 
         private fun JsonObject.typeAndCredentialIds(): Pair<TransactionDataType, List<QueryId>> = type() to credentialIds()
 
-        fun parse(value: Base64UrlSafe, query: DCQL): Result<TransactionData> = runCatchingCancellable {
-            val json = decode(value)
+        fun parse(
+            value: Base64UrlSafe,
+            query: DCQL,
+        ): Result<TransactionData> =
+            runCatchingCancellable {
+                val json = decode(value)
 
-            // verify required properties are present
-            val (_, credentialIds) = json.typeAndCredentialIds()
+                // verify required properties are present
+                val (_, credentialIds) = json.typeAndCredentialIds()
 
-            val requestedCredentialIds = query.credentials.ids.toSet()
-            require(requestedCredentialIds.containsAll(credentialIds)) {
-                "Invalid Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS}': '$credentialIds'"
+                val requestedCredentialIds = query.credentials.ids.toSet()
+                require(requestedCredentialIds.containsAll(credentialIds)) {
+                    "Invalid Transaction Data '${OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS}': '$credentialIds'"
+                }
+
+                val credentialFormats =
+                    query.credentials.value
+                        .filter { it.id in credentialIds }
+                        .map { it.format }
+                        .toSet()
+                require(1 == credentialFormats.size) {
+                    "Transaction Data must refer to Credentials that use the same Format"
+                }
+
+                val format = credentialFormats.first()
+                when (format) {
+                    Format.SdJwtVc -> SdJwtVc(value)
+                    Format.MsoMdoc -> MsoMdoc(value)
+                    else -> throw IllegalArgumentException("Unsupported Transaction Data Format '$format'")
+                }
             }
-
-            val credentialFormats = query.credentials.value.filter { it.id in credentialIds }.map { it.format }.toSet()
-            require(1 == credentialFormats.size) {
-                "Transaction Data must refer to Credentials that use the same Format"
-            }
-
-            val format = credentialFormats.first()
-            when (format) {
-                Format.SdJwtVc -> SdJwtVc(value)
-                Format.MsoMdoc -> MsoMdoc(value)
-                else -> throw IllegalArgumentException("Unsupported Transaction Data Format '$format'")
-            }
-        }
 
         fun sdJwtVc(
             type: TransactionDataType,
@@ -161,7 +194,9 @@ sealed interface TransactionData : java.io.Serializable {
      *
      * @property hashAlgorithms Hash Algorithms with which the Hash of this Transaction Data can be calculated
      */
-    data class SdJwtVc internal constructor(override val value: Base64UrlSafe) : TransactionData {
+    data class SdJwtVc internal constructor(
+        override val value: Base64UrlSafe,
+    ) : TransactionData {
         override val json: JsonObject by lazy { decode(value) }
         override val type: TransactionDataType get() = json.type()
         override val credentialIds: List<QueryId> get() = json.credentialIds()
@@ -190,19 +225,20 @@ sealed interface TransactionData : java.io.Serializable {
                 hashAlgorithms: List<HashAlgorithm>? = null,
                 builder: JsonObjectBuilder.() -> Unit = {},
             ): SdJwtVc {
-                val json = buildJsonObject {
-                    builder()
+                val json =
+                    buildJsonObject {
+                        builder()
 
-                    put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, type.value)
-                    putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
-                        credentialIds.forEach { add(it.value) }
-                    }
-                    if (!hashAlgorithms.isNullOrEmpty()) {
-                        putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS) {
-                            hashAlgorithms.forEach { add(it.name) }
+                        put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, type.value)
+                        putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
+                            credentialIds.forEach { add(it.value) }
+                        }
+                        if (!hashAlgorithms.isNullOrEmpty()) {
+                            putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_HASH_ALGORITHMS) {
+                                hashAlgorithms.forEach { add(it.name) }
+                            }
                         }
                     }
-                }
 
                 val serialized = jsonSupport.encodeToString(json)
                 val base64 = base64UrlNoPadding.encode(serialized.encodeToByteArray())
@@ -215,7 +251,9 @@ sealed interface TransactionData : java.io.Serializable {
     /**
      * Represents transaction data of type MSO_MDoc, encapsulated in a Base64UrlSafe formatted value.
      */
-    data class MsoMdoc internal constructor(override val value: Base64UrlSafe) : TransactionData {
+    data class MsoMdoc internal constructor(
+        override val value: Base64UrlSafe,
+    ) : TransactionData {
         override val json: JsonObject by lazy { decode(value) }
         override val type: TransactionDataType get() = json.type()
         override val credentialIds: List<QueryId> get() = json.credentialIds()
@@ -227,20 +265,20 @@ sealed interface TransactionData : java.io.Serializable {
         }
 
         companion object {
-
             operator fun invoke(
                 type: TransactionDataType,
                 credentialIds: List<QueryId>,
                 builder: JsonObjectBuilder.() -> Unit = {},
             ): MsoMdoc {
-                val json = buildJsonObject {
-                    builder()
+                val json =
+                    buildJsonObject {
+                        builder()
 
-                    put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, type.value)
-                    putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
-                        credentialIds.forEach { add(it.value) }
+                        put(OpenId4VPSpec.TRANSACTION_DATA_TYPE, type.value)
+                        putJsonArray(OpenId4VPSpec.TRANSACTION_DATA_CREDENTIAL_IDS) {
+                            credentialIds.forEach { add(it.value) }
+                        }
                     }
-                }
 
                 val serialized = jsonSupport.encodeToString(json)
                 val base64 = base64UrlNoPadding.encode(serialized.encodeToByteArray())
@@ -252,7 +290,9 @@ sealed interface TransactionData : java.io.Serializable {
 }
 
 @JvmInline
-value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializable {
+value class VerifierInfo(
+    val attestations: List<Attestation>,
+) : java.io.Serializable {
     init {
         require(attestations.isNotEmpty())
     }
@@ -265,10 +305,11 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
         @SerialName(OpenId4VPSpec.VERIFIER_INFO_DATA) @Required val data: Data,
         @SerialName(OpenId4VPSpec.VERIFIER_INFO_CREDENTIAL_IDS) val credentialIds: CredentialQueryIds? = null,
     ) : java.io.Serializable {
-
         @Serializable
         @JvmInline
-        value class Format(val value: String) : java.io.Serializable {
+        value class Format(
+            val value: String,
+        ) : java.io.Serializable {
             init {
                 require(value.isNotEmpty())
             }
@@ -283,7 +324,9 @@ value class VerifierInfo(val attestations: List<Attestation>) : java.io.Serializ
 
         @Serializable
         @JvmInline
-        value class Data(val value: JsonElement) : java.io.Serializable {
+        value class Data(
+            val value: JsonElement,
+        ) : java.io.Serializable {
             init {
                 require((value is JsonPrimitive && value.isString) || (value is JsonObject))
             }
@@ -325,21 +368,27 @@ data class ResolvedRequestObject(
  */
 sealed interface AuthorizationRequestError : java.io.Serializable
 
-data class HttpError(val cause: Throwable) : AuthorizationRequestError
+data class HttpError(
+    val cause: Throwable,
+) : AuthorizationRequestError
 
 /**
  * Validation errors that can occur while validating an authorization request
  */
 sealed interface RequestValidationError : AuthorizationRequestError {
-
-    data class InvalidJarJwt(val cause: String) : AuthorizationRequestError
+    data class InvalidJarJwt(
+        val cause: String,
+    ) : AuthorizationRequestError
 
     data object InvalidUseOfBothRequestAndRequestUri : RequestValidationError {
         @Suppress("unused")
         private fun readResolve(): Any = InvalidUseOfBothRequestAndRequestUri
     }
 
-    data class UnsupportedRequestUriMethod(val method: RequestUriMethod) : RequestValidationError
+    data class UnsupportedRequestUriMethod(
+        val method: RequestUriMethod,
+    ) : RequestValidationError
+
     data object InvalidRequestUriMethod : RequestValidationError {
         @Suppress("unused")
         private fun readResolve(): Any = InvalidRequestUriMethod
@@ -348,7 +397,9 @@ sealed interface RequestValidationError : AuthorizationRequestError {
     //
     // Response Type errors
     //
-    data class UnsupportedResponseType(val value: String) : RequestValidationError
+    data class UnsupportedResponseType(
+        val value: String,
+    ) : RequestValidationError
 
     data object MissingResponseType : RequestValidationError {
         @Suppress("unused")
@@ -358,7 +409,9 @@ sealed interface RequestValidationError : AuthorizationRequestError {
     //
     // Response Mode errors
     //
-    data class UnsupportedResponseMode(val value: String?) : RequestValidationError
+    data class UnsupportedResponseMode(
+        val value: String?,
+    ) : RequestValidationError
 
     //
     // Query source errors
@@ -378,7 +431,9 @@ sealed interface RequestValidationError : AuthorizationRequestError {
         private fun readResolve(): Any = InvalidClientId
     }
 
-    data class InvalidDigitalCredentialsQuery(val cause: Throwable) : RequestValidationError
+    data class InvalidDigitalCredentialsQuery(
+        val cause: Throwable,
+    ) : RequestValidationError
 
     data object UnsupportedQueryFormats : RequestValidationError {
         @Suppress("unused")
@@ -435,9 +490,13 @@ sealed interface RequestValidationError : AuthorizationRequestError {
         private fun readResolve(): Any = UnsupportedClientIdPrefix
     }
 
-    data class UnsupportedClientMetaData(val value: String) : RequestValidationError
+    data class UnsupportedClientMetaData(
+        val value: String,
+    ) : RequestValidationError
 
-    data class InvalidClientMetaData(val cause: String) : RequestValidationError
+    data class InvalidClientMetaData(
+        val cause: String,
+    ) : RequestValidationError
 
     data object MissingClientMetadataJwks : RequestValidationError {
         @Suppress("unused")
@@ -459,13 +518,21 @@ sealed interface RequestValidationError : AuthorizationRequestError {
         private fun readResolve(): Any = IdTokenEncryptionMethodMissing
     }
 
-    data class InvalidClientIdPrefix(val value: String) : RequestValidationError
+    data class InvalidClientIdPrefix(
+        val value: String,
+    ) : RequestValidationError
 
-    data class InvalidIdTokenType(val value: String) : RequestValidationError
+    data class InvalidIdTokenType(
+        val value: String,
+    ) : RequestValidationError
 
-    data class DIDResolutionFailed(val didUrl: String) : RequestValidationError
+    data class DIDResolutionFailed(
+        val didUrl: String,
+    ) : RequestValidationError
 
-    data class InvalidVerifierInfo(val reason: String) : RequestValidationError
+    data class InvalidVerifierInfo(
+        val reason: String,
+    ) : RequestValidationError
 
     data object MissingExpectedOrigins : RequestValidationError {
         @Suppress("unused")
@@ -492,10 +559,22 @@ sealed interface RequestValidationError : AuthorizationRequestError {
  * Errors that can occur while resolving an authorization request
  */
 sealed interface ResolutionError : AuthorizationRequestError {
-    data class UnknownScope(val scope: Scope) : ResolutionError
-    data class UnableToFetchRequestObject(val cause: Throwable) : ResolutionError
-    data class ClientMetadataJwksUnparsable(val cause: Throwable) : ResolutionError
-    data class InvalidTransactionData(val cause: Throwable) : ResolutionError
+    data class UnknownScope(
+        val scope: Scope,
+    ) : ResolutionError
+
+    data class UnableToFetchRequestObject(
+        val cause: Throwable,
+    ) : ResolutionError
+
+    data class ClientMetadataJwksUnparsable(
+        val cause: Throwable,
+    ) : ResolutionError
+
+    data class InvalidTransactionData(
+        val cause: Throwable,
+    ) : ResolutionError
+
     data object ClientVpFormatsNotSupportedFromWallet : ResolutionError {
         @Suppress("unused")
         private fun readResolve(): Any = ClientVpFormatsNotSupportedFromWallet
@@ -506,7 +585,9 @@ sealed interface ResolutionError : AuthorizationRequestError {
         private fun readResolve(): Any = UnsupportedDcApiExchangeProtocol
     }
 
-    data class DcApiExchangeProtocolNotMatchesReceivedRequest(val cause: String) : ResolutionError
+    data class DcApiExchangeProtocolNotMatchesReceivedRequest(
+        val cause: String,
+    ) : ResolutionError
 }
 
 /**
@@ -514,7 +595,6 @@ sealed interface ResolutionError : AuthorizationRequestError {
  * These errors are specific to the evaluation of policies defined for authorization requests.
  */
 sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError {
-
     data object AuthorizationPolicyApplicableOnlyForX509HashClient : AuthorizationPolicyValidationError {
         @Suppress("unused")
         private fun readResolve(): Any = AuthorizationPolicyApplicableOnlyForX509HashClient
@@ -530,34 +610,38 @@ sealed interface AuthorizationPolicyValidationError : AuthorizationRequestError 
         private fun readResolve(): Any = MultipleRegistrationCertificates
     }
 
-    data class MalformedRegistrationCertificate(val cause: String) : AuthorizationPolicyValidationError {
+    data class MalformedRegistrationCertificate(
+        val cause: String,
+    ) : AuthorizationPolicyValidationError {
         init {
             require(cause.isNotEmpty()) { "Cause cannot be empty" }
         }
     }
 
-    data class AuthorizationPolicyNotMet(val violation: RegistrationCertificatePolicy.PolicyViolation) : AuthorizationPolicyValidationError
+    data class AuthorizationPolicyNotMet(
+        val violation: RegistrationCertificatePolicy.PolicyViolation,
+    ) : AuthorizationPolicyValidationError
 }
 
 /**
  * An exception indicating an expected [error] while validating and/or resolving
  * an authorization request
  */
-data class AuthorizationRequestException(val error: AuthorizationRequestError) : RuntimeException()
+data class AuthorizationRequestException(
+    val error: AuthorizationRequestError,
+) : RuntimeException()
 
 /**
  * Convenient method that lifts an [AuthorizationRequestError] into
  * a [AuthorizationRequestException]
  */
-fun AuthorizationRequestError.asException(): AuthorizationRequestException =
-    AuthorizationRequestException(this)
+fun AuthorizationRequestError.asException(): AuthorizationRequestException = AuthorizationRequestException(this)
 
 /**
  * Convenient method that lifts an [AuthorizationRequestError] into
  * [Result] context (wrapping an [AuthorizationRequestException])
  */
-fun <T> AuthorizationRequestError.asFailure(): Result<T> =
-    Result.failure(asException())
+fun <T> AuthorizationRequestError.asFailure(): Result<T> = Result.failure(asException())
 
 /**
  * The outcome of [validating and resolving][AuthorizationRequestOverHttpResolver.resolveRequestUri]
@@ -582,7 +666,6 @@ sealed interface Resolution {
         val error: AuthorizationRequestError,
         val dispatchDetails: ErrorDispatchDetails?,
     ) : Resolution {
-
         companion object {
             fun nonDispatchable(error: AuthorizationRequestError): Invalid = Invalid(error, null)
         }
@@ -617,7 +700,6 @@ data class ErrorDispatchDetails(
  *
  */
 fun interface AuthorizationRequestOverHttpResolver {
-
     /**
      * Tries to validate and request the provided [uri] into a [ResolvedRequestObject].
      */
@@ -631,7 +713,6 @@ fun interface AuthorizationRequestOverHttpResolver {
  * validated and resolved into a [ResolvedRequestObject] or failed with an associated error.
  */
 fun interface AuthorizationRequestOverDCApiResolver {
-
     /**
      * Resolves and validates an authorization request received via the Digital Credential API (DC API) channel.
      * Processes the request data and produces a [Resolution] indicating whether the operation was successful.
@@ -643,5 +724,9 @@ fun interface AuthorizationRequestOverDCApiResolver {
      *         [Resolution.Success] if the request was successfully validated and resolved,
      *         or [Resolution.Invalid] if the resolution failed due to an error.
      */
-    suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution
+    suspend fun resolveRequestObject(
+        protocol: String,
+        origin: String,
+        requestData: JsonObject,
+    ): Resolution
 }

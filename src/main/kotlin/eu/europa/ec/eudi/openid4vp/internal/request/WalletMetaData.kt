@@ -36,12 +36,21 @@ private const val AUTHORIZATION_ENCRYPTION_ENC_VALUES_SUPPORTED = "authorization
 private const val RESPONSE_TYPES_SUPPOERTED = "response_types_supported"
 private const val RESPONSE_MODES_SUPPORTED = "response_modes_supported"
 
-internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<JWK>): JsonObject =
+internal fun walletMetaData(
+    cfg: OpenId4VPConfig,
+    clientId: String,
+    keys: List<JWK>,
+): JsonObject =
     buildJsonObject {
         //
         // Authorization Server Metadata
         //
-        val issuer = checkNotNull(cfg.signedRequestConfiguration.supportedRequestUriMethods.isPostSupported()?.issuer)
+        val issuer =
+            checkNotNull(
+                cfg.signedRequestConfiguration.supportedRequestUriMethods
+                    .isPostSupported()
+                    ?.issuer,
+            )
         put(RFC8414.ISSUER, issuer.value)
 
         //
@@ -52,7 +61,11 @@ internal fun walletMetaData(cfg: OpenId4VPConfig, clientId: String, keys: List<J
 
         // Signature
         val permitsSignedRequestObjects =
-            VerifierId.parse(clientId).getOrNull()?.prefix?.permitsSignedRequestObjects() ?: false
+            VerifierId
+                .parse(clientId)
+                .getOrNull()
+                ?.prefix
+                ?.permitsSignedRequestObjects() ?: false
         if (permitsSignedRequestObjects) {
             putJsonArray(REQUEST_OBJECT_SIGNING_ALG_VALUES_SUPPORTED) {
                 cfg.signedRequestConfiguration.supportedAlgorithms.forEach { alg -> add(alg.name) }

@@ -65,35 +65,40 @@ import eu.europa.ec.eudi.openid4vp.dcql.DCQL as DCQLQuery
  * Examples assume that you have cloned and running
  * https://github.com/eu-digital-identity-wallet/eudi-srv-web-verifier-endpoint-23220-4-kt
  */
-fun main(): Unit = runBlocking {
-    createHttpClient(enableLogging = true).use { httpClient ->
-        httpClient.program()
+fun main(): Unit =
+    runBlocking {
+        createHttpClient(enableLogging = true).use { httpClient ->
+            httpClient.program()
+        }
     }
-}
 
 suspend fun HttpClient.program() {
     val verifierApi = URL("https://dev.verifier-backend.eudiw.dev")
-    val wallet = Wallet(
-        walletConfig = walletConfig(
-            X509SanDns(TrustAnyX509),
-            X509Hash(TrustAnyX509),
-        ),
-        httpClient = this@program,
-    )
-
-    suspend fun runUseCase(transaction: Transaction) = coroutineScope {
-        println("Running ${transaction.name} ...")
-        val verifier = Verifier.make(
-            verifierApi = verifierApi,
-            transaction = transaction,
+    val wallet =
+        Wallet(
+            walletConfig =
+                walletConfig(
+                    X509SanDns(TrustAnyX509),
+                    X509Hash(TrustAnyX509),
+                ),
+            httpClient = this@program,
         )
 
-        when (val dispatchOutcome = wallet.handle(verifier.authorizationRequestUri)) {
-            is DispatchOutcome.RedirectURI -> error("Unexpected")
-            is DispatchOutcome.VerifierResponse.Accepted -> verifier.getWalletResponse(dispatchOutcome)
-            is DispatchOutcome.VerifierResponse.Rejected -> error("Unexpected failure")
+    suspend fun runUseCase(transaction: Transaction) =
+        coroutineScope {
+            println("Running ${transaction.name} ...")
+            val verifier =
+                Verifier.make(
+                    verifierApi = verifierApi,
+                    transaction = transaction,
+                )
+
+            when (val dispatchOutcome = wallet.handle(verifier.authorizationRequestUri)) {
+                is DispatchOutcome.RedirectURI -> error("Unexpected")
+                is DispatchOutcome.VerifierResponse.Accepted -> verifier.getWalletResponse(dispatchOutcome)
+                is DispatchOutcome.VerifierResponse.Rejected -> error("Unexpected failure")
+            }
         }
-    }
 
     runUseCase(Transaction.MsoMdocPidDcql)
     runUseCase(Transaction.SdJwtVcPidDcql)
@@ -113,31 +118,33 @@ class Verifier private constructor(
     private val presentationId: String,
     val authorizationRequestUri: URI,
 ) {
-
-    override fun toString(): String =
-        "Verifier presentationId=$presentationId, authorizationRequestUri=$authorizationRequestUri"
+    override fun toString(): String = "Verifier presentationId=$presentationId, authorizationRequestUri=$authorizationRequestUri"
 
     suspend fun getWalletResponse(dispatchOutcome: DispatchOutcome.VerifierResponse.Accepted): WalletResponse {
         val responseCode = Url(checkNotNull(dispatchOutcome.redirectURI)).parameters["response_code"]
         checkNotNull(responseCode) { "Failed to extract response_code" }
 
-        val walletResponse = createHttpClient().use {
-            it.get("$verifierApi/ui/presentations/$presentationId?response_code=$responseCode") {
-                accept(ContentType.Application.Json)
-            }
-        }.body<WalletResponse>()
+        val walletResponse =
+            createHttpClient()
+                .use {
+                    it.get("$verifierApi/ui/presentations/$presentationId?response_code=$responseCode") {
+                        accept(ContentType.Application.Json)
+                    }
+                }.body<WalletResponse>()
 
         walletResponse.vpToken?.also { verifierPrintln("Got vp_token with payload $it") }
         return walletResponse
     }
 
     companion object {
-
         /**
          * Creates a new verifier that knows (out of bound) the
          * wallet's public key
          */
-        suspend fun make(verifierApi: URL, transaction: Transaction): Verifier =
+        suspend fun make(
+            verifierApi: URL,
+            transaction: Transaction,
+        ): Verifier =
             coroutineScope {
                 verifierPrintln("Initializing Verifier ...")
                 withContext(Dispatchers.IO + CoroutineName("wallet-initTransaction")) {
@@ -162,20 +169,21 @@ class Verifier private constructor(
             transactionData: List<TransactionData>?,
         ): JsonObject {
             verifierPrintln("Placing to verifier endpoint OpenId4Vp authorization request  ...")
-            val request = buildJsonObject {
-                put("nonce", nonce)
-                put("dcql_query", jsonSupport.encodeToJsonElement(query))
-                put("response_mode", "direct_post.jwt")
-                put("jar_mode", "by_reference")
-                put("wallet_response_redirect_uri_template", "https://foo?response_code={RESPONSE_CODE}")
-                if (!transactionData.isNullOrEmpty()) {
-                    putJsonArray("transaction_data") {
-                        addAll(transactionData.map { it.json })
+            val request =
+                buildJsonObject {
+                    put("nonce", nonce)
+                    put("dcql_query", jsonSupport.encodeToJsonElement(query))
+                    put("response_mode", "direct_post.jwt")
+                    put("jar_mode", "by_reference")
+                    put("wallet_response_redirect_uri_template", "https://foo?response_code={RESPONSE_CODE}")
+                    if (!transactionData.isNullOrEmpty()) {
+                        putJsonArray("transaction_data") {
+                            addAll(transactionData.map { it.json })
+                        }
                     }
+                    put("request_uri_method", "post")
+                    put("intended_use_id", "TEST-01")
                 }
-                put("request_uri_method", "post")
-                put("intended_use_id", "TEST-01")
-            }
             return initTransaction(client, verifierApi, request)
         }
 
@@ -184,24 +192,30 @@ class Verifier private constructor(
             verifierApi: URL,
             body: B,
         ): JsonObject =
-            client.post("$verifierApi/ui/presentations") {
-                contentType(ContentType.Application.Json)
-                accept(ContentType.Application.Json)
-                setBody(body)
-            }.body<JsonObject>()
+            client
+                .post("$verifierApi/ui/presentations") {
+                    contentType(ContentType.Application.Json)
+                    accept(ContentType.Application.Json)
+                    setBody(body)
+                }.body<JsonObject>()
 
         private fun formatAuthorizationRequest(iniTransactionResponse: JsonObject): URI {
             fun String.encode() = URLEncoder.encode(this, "UTF-8")
             val clientId = iniTransactionResponse["client_id"]?.jsonPrimitive?.content?.encode()!!
-            val requestUri = buildString {
-                iniTransactionResponse["request_uri"]?.jsonPrimitive?.contentOrNull?.encode()?.let { append("request_uri=$it") }
-                iniTransactionResponse["request_uri_method"]?.jsonPrimitive?.contentOrNull?.let {
-                    if (isNotBlank()) {
-                        append("&")
-                        append("request_uri_method=$it")
+            val requestUri =
+                buildString {
+                    iniTransactionResponse["request_uri"]
+                        ?.jsonPrimitive
+                        ?.contentOrNull
+                        ?.encode()
+                        ?.let { append("request_uri=$it") }
+                    iniTransactionResponse["request_uri_method"]?.jsonPrimitive?.contentOrNull?.let {
+                        if (isNotBlank()) {
+                            append("&")
+                            append("request_uri_method=$it")
+                        }
                     }
-                }
-            }.takeIf { it.isNotBlank() }
+                }.takeIf { it.isNotBlank() }
 
             val request = iniTransactionResponse["request"]?.jsonPrimitive?.contentOrNull?.let { "request=$it" }
             require(request != null || requestUri != null)
@@ -228,22 +242,25 @@ data class Transaction(
     val name: String = "OpenId4Vp"
 
     companion object {
-        val MsoMdocPidDcql: Transaction = Transaction(
-            jsonSupport.decodeFromString<DCQLQuery>(loadResource("/example/mso_mdoc-pid-dcql-query.json")),
-        )
+        val MsoMdocPidDcql: Transaction =
+            Transaction(
+                jsonSupport.decodeFromString<DCQLQuery>(loadResource("/example/mso_mdoc-pid-dcql-query.json")),
+            )
 
-        val SdJwtVcPidDcql: Transaction = run {
-            val dcql = jsonSupport.decodeFromString<DCQLQuery>(loadResource("/example/sd-jwt-vc-pid-dcql-query.json"))
-            val queryId = dcql.credentials.ids.first()
-            val transactionData = TransactionData.sdJwtVc(
-                TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
-                listOf(queryId),
-            ) {
-                put("purpose", "We must verify your Family Name")
+        val SdJwtVcPidDcql: Transaction =
+            run {
+                val dcql = jsonSupport.decodeFromString<DCQLQuery>(loadResource("/example/sd-jwt-vc-pid-dcql-query.json"))
+                val queryId = dcql.credentials.ids.first()
+                val transactionData =
+                    TransactionData.sdJwtVc(
+                        TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
+                        listOf(queryId),
+                    ) {
+                        put("purpose", "We must verify your Family Name")
+                    }
+
+                Transaction(dcql, listOf(transactionData))
             }
-
-            Transaction(dcql, listOf(transactionData))
-        }
     }
 }
 
@@ -269,7 +286,10 @@ private class Wallet(
         holderConsensus: suspend (ResolvedRequestObject) -> Consensus,
     ): DispatchOutcome =
         when (val resolution = resolveRequestUri(uri)) {
-            is Resolution.Invalid -> throw resolution.error.asException()
+            is Resolution.Invalid -> {
+                throw resolution.error.asException()
+            }
+
             is Resolution.Success -> {
                 val requestObject = resolution.requestObject
                 val consensus = holderConsensus(requestObject)
@@ -282,24 +302,34 @@ private class Wallet(
             val query = request.query
             check(1 == query.credentials.value.size) { "found more than 1 credentials" }
             val credential = query.credentials.value.first()
-            val verifiablePresentation = when (val format = credential.format.value) {
-                "mso_mdoc" -> prepareMsoMdocVerifiablePresentation(
-                    request.client,
-                    request.nonce,
-                    request.responseEncryptionSpecification,
-                    request.responseMode,
-                )
+            val verifiablePresentation =
+                when (val format = credential.format.value) {
+                    "mso_mdoc" -> {
+                        prepareMsoMdocVerifiablePresentation(
+                            request.client,
+                            request.nonce,
+                            request.responseEncryptionSpecification,
+                            request.responseMode,
+                        )
+                    }
 
-                "dc+sd-jwt" -> prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
-                else -> error("unsupported format $format")
-            }
+                    "dc+sd-jwt" -> {
+                        prepareSdJwtVcVerifiablePresentation(request.client, request.nonce, request.transactionData)
+                    }
+
+                    else -> {
+                        error("unsupported format $format")
+                    }
+                }
 
             Consensus.PositiveConsensus(
-                verifiablePresentations = VerifiablePresentations(
-                    value = mapOf(
-                        credential.id to listOf(verifiablePresentation),
+                verifiablePresentations =
+                    VerifiablePresentations(
+                        value =
+                            mapOf(
+                                credential.id to listOf(verifiablePresentation),
+                            ),
                     ),
-                ),
             )
         }
 
@@ -312,38 +342,49 @@ private class Wallet(
         val holderKey = ECKey.parse(loadResource("/example/sd-jwt-vc-pid-key.json"))
         check(holderKey.isPrivate) { "a private key is required" }
 
-        val sdHash = run {
-            val digest = MessageDigest.getInstance("SHA-256")
-            digest.update(sdJwtVc.encodeToByteArray())
-            base64UrlNoPadding.encode(digest.digest())
-        }
-        val keyBindingJwt = run {
-            val header = JWSHeader.Builder(JWSAlgorithm.ES256)
-                .type(JOSEObjectType("kb+jwt"))
-                .keyID(holderKey.keyID)
-                .build()
-            val claims = JWTClaimsSet.Builder()
-                .audience(audience.id.clientId)
-                .claim("nonce", nonce)
-                .issueTime(Date.from(walletConfig.clock.instant()))
-                .claim("sd_hash", sdHash)
-                .apply {
-                    if (!transactionData.isNullOrEmpty()) {
-                        check(transactionData.all { it is TransactionData.SdJwtVc && HashAlgorithm.SHA_256 in it.hashAlgorithmsOrDefault })
+        val sdHash =
+            run {
+                val digest = MessageDigest.getInstance("SHA-256")
+                digest.update(sdJwtVc.encodeToByteArray())
+                base64UrlNoPadding.encode(digest.digest())
+            }
+        val keyBindingJwt =
+            run {
+                val header =
+                    JWSHeader
+                        .Builder(JWSAlgorithm.ES256)
+                        .type(JOSEObjectType("kb+jwt"))
+                        .keyID(holderKey.keyID)
+                        .build()
+                val claims =
+                    JWTClaimsSet
+                        .Builder()
+                        .audience(audience.id.clientId)
+                        .claim("nonce", nonce)
+                        .issueTime(Date.from(walletConfig.clock.instant()))
+                        .claim("sd_hash", sdHash)
+                        .apply {
+                            if (!transactionData.isNullOrEmpty()) {
+                                check(
+                                    transactionData.all {
+                                        it is TransactionData.SdJwtVc &&
+                                            HashAlgorithm.SHA_256 in it.hashAlgorithmsOrDefault
+                                    },
+                                )
 
-                        val transactionDataHashes = transactionData.map {
-                            val digest = MessageDigest.getInstance("SHA-256")
-                            digest.update(it.value.encodeToByteArray())
-                            base64UrlNoPadding.encode(digest.digest())
-                        }
+                                val transactionDataHashes =
+                                    transactionData.map {
+                                        val digest = MessageDigest.getInstance("SHA-256")
+                                        digest.update(it.value.encodeToByteArray())
+                                        base64UrlNoPadding.encode(digest.digest())
+                                    }
 
-                        claim("transaction_data_hashes_alg", HashAlgorithm.SHA_256.name)
-                        claim("transaction_data_hashes", transactionDataHashes)
-                    }
-                }
-                .build()
-            SignedJWT(header, claims).apply { sign(ECDSASigner(holderKey)) }
-        }
+                                claim("transaction_data_hashes_alg", HashAlgorithm.SHA_256.name)
+                                claim("transaction_data_hashes", transactionDataHashes)
+                            }
+                        }.build()
+                SignedJWT(header, claims).apply { sign(ECDSASigner(holderKey)) }
+            }
         return VerifiablePresentation.Generic("$sdJwtVc${keyBindingJwt.serialize()}")
     }
 
@@ -355,70 +396,78 @@ private class Wallet(
     ): VerifiablePresentation.Generic {
         val ephemeralEncryptionKey = responseEncryptionSpecification?.recipientKey
 
-        val responseUri = when (responseMode) {
-            is ResponseMode.DirectPost -> responseMode.responseURI.toString()
-            is ResponseMode.DirectPostJwt -> responseMode.responseURI.toString()
-            is ResponseMode.Fragment -> responseMode.redirectUri.toString()
-            is ResponseMode.FragmentJwt -> responseMode.redirectUri.toString()
-            is ResponseMode.Query -> responseMode.redirectUri.toString()
-            is ResponseMode.QueryJwt -> responseMode.redirectUri.toString()
-            ResponseMode.DCApi, ResponseMode.DCApiJwt -> error("No uri for response mode $this")
-        }
+        val responseUri =
+            when (responseMode) {
+                is ResponseMode.DirectPost -> responseMode.responseURI.toString()
+                is ResponseMode.DirectPostJwt -> responseMode.responseURI.toString()
+                is ResponseMode.Fragment -> responseMode.redirectUri.toString()
+                is ResponseMode.FragmentJwt -> responseMode.redirectUri.toString()
+                is ResponseMode.Query -> responseMode.redirectUri.toString()
+                is ResponseMode.QueryJwt -> responseMode.redirectUri.toString()
+                ResponseMode.DCApi, ResponseMode.DCApiJwt -> error("No uri for response mode $this")
+            }
 
-        val openID4VPHandoverInfo = listOf(
-            audience.id.clientId.toDataElement(),
-            nonce.toDataElement(),
-            ephemeralEncryptionKey?.computeThumbprint()?.decode()?.toDataElement() ?: NullElement(),
-            responseUri.toDataElement(),
-        ).toDataElement()
+        val openID4VPHandoverInfo =
+            listOf(
+                audience.id.clientId.toDataElement(),
+                nonce.toDataElement(),
+                ephemeralEncryptionKey?.computeThumbprint()?.decode()?.toDataElement() ?: NullElement(),
+                responseUri.toDataElement(),
+            ).toDataElement()
         val openID4VPHandoverInfoBytes = Cbor.encodeToByteArray(openID4VPHandoverInfo)
         val openID4VPHandoverInfoHash = MessageDigest.getInstance("SHA-256").digest(openID4VPHandoverInfoBytes)
-        val openID4VPHandover = listOf(
-            "OpenID4VPHandover".toDataElement(),
-            openID4VPHandoverInfoHash.toDataElement(),
-        ).toDataElement()
+        val openID4VPHandover =
+            listOf(
+                "OpenID4VPHandover".toDataElement(),
+                openID4VPHandoverInfoHash.toDataElement(),
+            ).toDataElement()
 
-        val sessionTranscript = listOf(
-            NullElement(),
-            NullElement(),
-            openID4VPHandover,
-        ).toDataElement()
+        val sessionTranscript =
+            listOf(
+                NullElement(),
+                NullElement(),
+                openID4VPHandover,
+            ).toDataElement()
 
         val deviceNameSpaces = EncodedCBORElement(Cbor.encodeToByteArray(MapElement(emptyMap())))
         val deviceAuthentication = DeviceAuthentication(sessionTranscript, "eu.europa.ec.eudi.pid.1", deviceNameSpaces)
         val deviceAuthenticationBytes = EncodedCBORElement(Cbor.encodeToByteArray(deviceAuthentication))
 
         val deviceKey = ECKey.parse(loadResource("/example/mso_mdoc_pid-devicekey.json"))
-        val cryptoProvider = SimpleCOSECryptoProvider(
-            listOf(
-                COSECryptoProviderKeyInfo(
-                    keyID = "device",
-                    algorithmID = AlgorithmID.ECDSA_256,
-                    publicKey = deviceKey.toECPublicKey(),
-                    privateKey = deviceKey.toECPrivateKey(),
-                    x5Chain = emptyList(),
-                    trustedRootCAs = emptyList(),
+        val cryptoProvider =
+            SimpleCOSECryptoProvider(
+                listOf(
+                    COSECryptoProviderKeyInfo(
+                        keyID = "device",
+                        algorithmID = AlgorithmID.ECDSA_256,
+                        publicKey = deviceKey.toECPublicKey(),
+                        privateKey = deviceKey.toECPrivateKey(),
+                        x5Chain = emptyList(),
+                        trustedRootCAs = emptyList(),
+                    ),
                 ),
-            ),
-        )
+            )
         val deviceSignature = cryptoProvider.sign1(Cbor.encodeToByteArray(deviceAuthenticationBytes), null, null, "device")
-        val deviceSigned = DeviceSigned(
-            nameSpaces = deviceNameSpaces,
-            deviceAuth = DeviceAuth(
-                deviceMac = null,
-                deviceSignature = deviceSignature.detachPayload(),
-            ),
-        )
+        val deviceSigned =
+            DeviceSigned(
+                nameSpaces = deviceNameSpaces,
+                deviceAuth =
+                    DeviceAuth(
+                        deviceMac = null,
+                        deviceSignature = deviceSignature.detachPayload(),
+                    ),
+            )
 
         val base64 = Base64.UrlSafe.withPadding(Base64.PaddingOption.ABSENT_OPTIONAL)
         val issuerSigned = Cbor.decodeFromByteArray<IssuerSigned>(base64.decode(loadResource("/example/mso_mdoc_pid-issuersigned.txt")))
 
-        val document = MDoc(
-            docType = "eu.europa.ec.eudi.pid.1".toDataElement(),
-            issuerSigned = issuerSigned,
-            deviceSigned = deviceSigned,
-            errors = null,
-        )
+        val document =
+            MDoc(
+                docType = "eu.europa.ec.eudi.pid.1".toDataElement(),
+                issuerSigned = issuerSigned,
+                deviceSigned = deviceSigned,
+                errors = null,
+            )
         val deviceResponse = DeviceResponse(listOf(document))
 
         return VerifiablePresentation.Generic(base64.encode(Cbor.encodeToByteArray(deviceResponse)))
@@ -436,35 +485,41 @@ private val TrustAnyX509: (List<X509Certificate>) -> Boolean = { _ ->
 
 private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix) =
     OpenId4VPConfig(
-        vpFormatsSupported = VpFormatsSupported(
-            VpFormatsSupported.SdJwtVc.HAIP,
-            VpFormatsSupported.MsoMdoc(
-                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-            ),
-        ),
-        supportedTransactionDataTypes = listOf(
-            SupportedTransactionDataType.SdJwtVc(
-                TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
-                setOf(HashAlgorithm.SHA_256),
-            ),
-        ),
-        signedRequestConfiguration = SignedRequestConfiguration(
-            supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
-            supportedRequestUriMethods = SupportedRequestUriMethods.Both(
-                SupportedRequestUriMethods.Post(
-                    jarEncryption = EncryptionRequirement.Required(
-                        supportedEncryptionAlgorithms = EncryptionRequirement.Required.SUPPORTED_ENCRYPTION_ALGORITHMS,
-                        supportedEncryptionMethods = EncryptionRequirement.Required.SUPPORTED_ENCRYPTION_METHODS,
-                        ephemeralEncryptionKeyCurve = Curve.P_521,
-                    ),
+        vpFormatsSupported =
+            VpFormatsSupported(
+                VpFormatsSupported.SdJwtVc.HAIP,
+                VpFormatsSupported.MsoMdoc(
+                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
                 ),
             ),
-        ),
-        responseEncryptionConfiguration = ResponseEncryptionConfiguration.Supported(
-            supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
-            supportedMethods = listOf(EncryptionMethod.A128GCM),
-        ),
+        supportedTransactionDataTypes =
+            listOf(
+                SupportedTransactionDataType.SdJwtVc(
+                    TransactionDataType("eu.europa.ec.eudi.family-name-presentation"),
+                    setOf(HashAlgorithm.SHA_256),
+                ),
+            ),
+        signedRequestConfiguration =
+            SignedRequestConfiguration(
+                supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
+                supportedRequestUriMethods =
+                    SupportedRequestUriMethods.Both(
+                        SupportedRequestUriMethods.Post(
+                            jarEncryption =
+                                EncryptionRequirement.Required(
+                                    supportedEncryptionAlgorithms = EncryptionRequirement.Required.SUPPORTED_ENCRYPTION_ALGORITHMS,
+                                    supportedEncryptionMethods = EncryptionRequirement.Required.SUPPORTED_ENCRYPTION_METHODS,
+                                    ephemeralEncryptionKeyCurve = Curve.P_521,
+                                ),
+                        ),
+                    ),
+            ),
+        responseEncryptionConfiguration =
+            ResponseEncryptionConfiguration.Supported(
+                supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
+                supportedMethods = listOf(EncryptionMethod.A128GCM),
+            ),
         supportedClientIdPrefixes = supportedClientIdPrefix,
         clock = Clock.systemDefaultZone(),
     )
@@ -472,6 +527,7 @@ private fun walletConfig(vararg supportedClientIdPrefix: SupportedClientIdPrefix
 private object Resource
 
 private fun loadResource(resource: String): String =
-    Resource.javaClass.getResource(resource)
+    Resource.javaClass
+        .getResource(resource)
         ?.readText()
         ?: error("resource '$resource' not found")

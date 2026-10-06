@@ -64,22 +64,29 @@ fun createHttpClient(enableLogging: Boolean = false): HttpClient =
     }
 
 private object SslSettings {
-
     fun sslContext(): SSLContext {
         val sslContext = SSLContext.getInstance("TLS")
         sslContext.init(null, arrayOf(trustManager()), SecureRandom())
         return sslContext
     }
 
-    fun hostNameVerifier(): HostnameVerifier = TrustAllHosts
-    fun trustManager(): X509TrustManager = TrustAllCerts as X509TrustManager
+    fun hostNameVerifier(): HostnameVerifier = trustAllHosts
 
-    private var TrustAllCerts: TrustManager = object : X509TrustManager {
-        override fun checkClientTrusted(chain: Array<X509Certificate>, authType: String) {}
-        override fun checkServerTrusted(chain: Array<X509Certificate>, authType: String) {}
-        override fun getAcceptedIssuers(): Array<X509Certificate> {
-            return arrayOf()
+    fun trustManager(): X509TrustManager = trustAllCerts as X509TrustManager
+
+    private var trustAllCerts: TrustManager =
+        object : X509TrustManager {
+            override fun checkClientTrusted(
+                chain: Array<X509Certificate>,
+                authType: String,
+            ) {}
+
+            override fun checkServerTrusted(
+                chain: Array<X509Certificate>,
+                authType: String,
+            ) {}
+
+            override fun getAcceptedIssuers(): Array<X509Certificate> = arrayOf()
         }
-    }
-    private val TrustAllHosts: HostnameVerifier = HostnameVerifier { _, _ -> true }
+    private val trustAllHosts: HostnameVerifier = HostnameVerifier { _, _ -> true }
 }

@@ -32,7 +32,9 @@ import java.net.URL
 
 @Serializable
 @JvmInline
-internal value class VerifierInfoTO(val value: JsonArray) {
+internal value class VerifierInfoTO(
+    val value: JsonArray,
+) {
     init {
         require(value.isNotEmpty())
         require(value.all { it is JsonObject })
@@ -46,7 +48,9 @@ internal value class VerifierInfoTO(val value: JsonArray) {
 
 @Serializable
 @JvmInline
-internal value class TransactionDataTO(val value: JsonArray) {
+internal value class TransactionDataTO(
+    val value: JsonArray,
+) {
     init {
         require(value.isNotEmpty())
         require(value.all { it is JsonPrimitive && it.isString })
@@ -59,7 +63,8 @@ internal value class TransactionDataTO(val value: JsonArray) {
 }
 
 enum class RequestUriMethod {
-    GET, POST
+    GET,
+    POST,
 }
 
 /**
@@ -68,8 +73,9 @@ enum class RequestUriMethod {
  * This is merely a data carrier structure that doesn't enforce any rules.
  */
 internal sealed interface UnvalidatedRequest {
-
-    data class Plain(val requestObject: UnvalidatedRequestObject) : UnvalidatedRequest
+    data class Plain(
+        val requestObject: UnvalidatedRequestObject,
+    ) : UnvalidatedRequest
 
     /**
      * JWT Secured authorization request (JAR)
@@ -83,7 +89,10 @@ internal sealed interface UnvalidatedRequest {
         /**
          * A JAR passed by value
          */
-        data class PassByValue(override val clientId: String, val jwt: Jwt) : JwtSecured
+        data class PassByValue(
+            override val clientId: String,
+            val jwt: Jwt,
+        ) : JwtSecured
 
         /**
          * A JAR passed by reference
@@ -96,58 +105,59 @@ internal sealed interface UnvalidatedRequest {
     }
 
     companion object {
-
         /**
          * Convenient method for parsing a URI representing an OAUTH2 Authorization request.
          */
-        fun make(uriStr: String): Result<UnvalidatedRequest> = runCatchingCancellable {
-            val requestParams = with(URI.create(uriStr)) {
-                toKtorUrl().parameters.toMap().mapValues { it.value.first() }
+        fun make(uriStr: String): Result<UnvalidatedRequest> =
+            runCatchingCancellable {
+                val requestParams =
+                    with(URI.create(uriStr)) {
+                        toKtorUrl().parameters.toMap().mapValues { it.value.first() }
+                    }
+
+                fun clientId(): String =
+                    requestParams["client_id"]
+                        ?: throw RequestValidationError.MissingClientId.asException()
+
+                val requestValue = requestParams["request"]
+                val requestUriValue = requestParams["request_uri"]
+                val requestUriMethod =
+                    requestParams["request_uri_method"]?.let { value ->
+                        when (value) {
+                            "get" -> RequestUriMethod.GET
+                            "post" -> RequestUriMethod.POST
+                            else -> throw RequestValidationError.InvalidRequestUriMethod.asException()
+                        }
+                    }
+                when {
+                    !requestValue.isNullOrEmpty() -> {
+                        ensure(requestUriValue == null) {
+                            RequestValidationError.InvalidUseOfBothRequestAndRequestUri.asException()
+                        }
+                        ensure(requestUriMethod == null) {
+                            RequestValidationError.InvalidRequestUriMethod.asException()
+                        }
+                        PassByValue(clientId(), requestValue)
+                    }
+
+                    !requestUriValue.isNullOrEmpty() -> {
+                        val requestUri = requestUriValue.asHttpsURL().getOrThrow()
+                        PassByReference(clientId(), requestUri, requestUriMethod)
+                    }
+
+                    else -> {
+                        notSecured(requestParams)
+                    }
+                }
             }
-
-            fun clientId(): String =
-                requestParams["client_id"]
-                    ?: throw RequestValidationError.MissingClientId.asException()
-
-            val requestValue = requestParams["request"]
-            val requestUriValue = requestParams["request_uri"]
-            val requestUriMethod =
-                requestParams["request_uri_method"]?.let { value ->
-                    when (value) {
-                        "get" -> RequestUriMethod.GET
-                        "post" -> RequestUriMethod.POST
-                        else -> throw RequestValidationError.InvalidRequestUriMethod.asException()
-                    }
-                }
-            when {
-                !requestValue.isNullOrEmpty() -> {
-                    ensure(requestUriValue == null) {
-                        RequestValidationError.InvalidUseOfBothRequestAndRequestUri.asException()
-                    }
-                    ensure(requestUriMethod == null) {
-                        RequestValidationError.InvalidRequestUriMethod.asException()
-                    }
-                    PassByValue(clientId(), requestValue)
-                }
-
-                !requestUriValue.isNullOrEmpty() -> {
-                    val requestUri = requestUriValue.asHttpsURL().getOrThrow()
-                    PassByReference(clientId(), requestUri, requestUriMethod)
-                }
-
-                else -> notSecured(requestParams)
-            }
-        }
 
         /**
          * Populates a [Plain] from the request parameters of an authorization request
          */
         private fun notSecured(requestParams: Map<String, String?>): Plain {
-            fun jsonObject(p: String): JsonObject? =
-                requestParams[p]?.let { Json.parseToJsonElement(it).jsonObject }
+            fun jsonObject(p: String): JsonObject? = requestParams[p]?.let { Json.parseToJsonElement(it).jsonObject }
 
-            fun jsonArray(p: String): JsonArray? =
-                requestParams[p]?.let { Json.parseToJsonElement(it).jsonArray }
+            fun jsonArray(p: String): JsonArray? = requestParams[p]?.let { Json.parseToJsonElement(it).jsonArray }
 
             return Plain(
                 UnvalidatedRequestObject(
@@ -173,7 +183,6 @@ internal class DefaultRequestResolverOverHttp(
     private val openId4VPConfig: OpenId4VPConfig,
     private val httpClient: HttpClient,
 ) : AuthorizationRequestOverHttpResolver {
-
     override suspend fun resolveRequestUri(uri: String): Resolution =
         with(httpClient) {
             resolveRequestUri(uri)
@@ -238,41 +247,68 @@ private fun uriMatchesClient(
     responseMode: ResponseMode,
     client: AuthenticatedClient,
 ): Boolean {
-    val uri: URI = when (responseMode) {
-        is ResponseMode.DirectPost -> responseMode.responseURI.toURI()
-        is ResponseMode.DirectPostJwt -> responseMode.responseURI.toURI()
-        is ResponseMode.Query -> responseMode.redirectUri
-        is ResponseMode.QueryJwt -> responseMode.redirectUri
-        is ResponseMode.Fragment -> responseMode.redirectUri
-        is ResponseMode.FragmentJwt -> responseMode.redirectUri
-        ResponseMode.DCApi,
-        ResponseMode.DCApiJwt,
-        -> return false
-    }
+    val uri: URI =
+        when (responseMode) {
+            is ResponseMode.DirectPost -> responseMode.responseURI.toURI()
+
+            is ResponseMode.DirectPostJwt -> responseMode.responseURI.toURI()
+
+            is ResponseMode.Query -> responseMode.redirectUri
+
+            is ResponseMode.QueryJwt -> responseMode.redirectUri
+
+            is ResponseMode.Fragment -> responseMode.redirectUri
+
+            is ResponseMode.FragmentJwt -> responseMode.redirectUri
+
+            ResponseMode.DCApi,
+            ResponseMode.DCApiJwt,
+            -> return false
+        }
     return when (client) {
-        is AuthenticatedClient.Preregistered -> true
-        is AuthenticatedClient.RedirectUri -> client.clientId == uri
-        is AuthenticatedClient.DecentralizedIdentifier -> true
+        is AuthenticatedClient.Preregistered -> {
+            true
+        }
+
+        is AuthenticatedClient.RedirectUri -> {
+            client.clientId == uri
+        }
+
+        is AuthenticatedClient.DecentralizedIdentifier -> {
+            true
+        }
+
         is AuthenticatedClient.VerifierAttestation -> {
-            val allowedUris = when (responseMode) {
-                is ResponseMode.Query,
-                is ResponseMode.QueryJwt,
-                is ResponseMode.Fragment,
-                is ResponseMode.FragmentJwt,
-                -> client.claims.redirectUris
-                is ResponseMode.DirectPost,
-                is ResponseMode.DirectPostJwt,
-                -> client.claims.responseUris
-                ResponseMode.DCApi,
-                ResponseMode.DCApiJwt,
-                -> return false
-            }
+            val allowedUris =
+                when (responseMode) {
+                    is ResponseMode.Query,
+                    is ResponseMode.QueryJwt,
+                    is ResponseMode.Fragment,
+                    is ResponseMode.FragmentJwt,
+                    -> client.claims.redirectUris
+
+                    is ResponseMode.DirectPost,
+                    is ResponseMode.DirectPostJwt,
+                    -> client.claims.responseUris
+
+                    ResponseMode.DCApi,
+                    ResponseMode.DCApiJwt,
+                    -> return false
+                }
             allowedUris == null || uri.toString() in allowedUris
         }
 
-        is AuthenticatedClient.X509SanDns -> client.clientId == uri.host
-        is AuthenticatedClient.X509Hash -> true
-        is AuthenticatedClient.Origin -> false
+        is AuthenticatedClient.X509SanDns -> {
+            client.clientId == uri.host
+        }
+
+        is AuthenticatedClient.X509Hash -> {
+            true
+        }
+
+        is AuthenticatedClient.Origin -> {
+            false
+        }
     }
 }
 
@@ -323,55 +359,75 @@ private fun dispatchErrorDetailsOrNull(
 private fun UnvalidatedRequestObject.responseEncryptionSpecification(
     openId4VPConfig: OpenId4VPConfig,
     responseMode: ResponseMode,
-): Result<ResponseEncryptionSpecification?> = runCatchingCancellable {
-    clientMetaData?.let {
-        val decodeFromJsonElement = jsonSupport.decodeFromJsonElement<UnvalidatedClientMetaData>(clientMetaData)
-        val validatedClientMetadata = decodeFromJsonElement.let {
-            ClientMetaDataValidator.validateClientMetaData(
-                it,
-                responseMode,
-                null,
-                openId4VPConfig.responseEncryptionConfiguration,
-                openId4VPConfig.vpFormatsSupported,
-            )
+): Result<ResponseEncryptionSpecification?> =
+    runCatchingCancellable {
+        clientMetaData?.let {
+            val decodeFromJsonElement = jsonSupport.decodeFromJsonElement<UnvalidatedClientMetaData>(clientMetaData)
+            val validatedClientMetadata =
+                decodeFromJsonElement.let {
+                    ClientMetaDataValidator.validateClientMetaData(
+                        it,
+                        responseMode,
+                        null,
+                        openId4VPConfig.responseEncryptionConfiguration,
+                        openId4VPConfig.vpFormatsSupported,
+                    )
+                }
+            validatedClientMetadata.responseEncryptionSpecification
         }
-        validatedClientMetadata.responseEncryptionSpecification
     }
-}
 
 private fun UnvalidatedRequestObject.responseMode(): ResponseMode? {
-    fun responseUri(): URL? =
-        responseUri?.asHttpsURL()?.getOrNull()
+    fun responseUri(): URL? = responseUri?.asHttpsURL()?.getOrNull()
 
-    fun redirectUri(): URI? =
-        redirectUri?.asHttpsURI()?.getOrNull()
+    fun redirectUri(): URI? = redirectUri?.asHttpsURI()?.getOrNull()
 
     return when (responseMode) {
-        "direct_post" ->
-            if (redirectUri != null) null
-            else responseUri()?.let { ResponseMode.DirectPost(it) }
+        "direct_post" -> {
+            if (redirectUri != null)
+                null
+            else
+                responseUri()?.let { ResponseMode.DirectPost(it) }
+        }
 
-        "direct_post.jwt" ->
-            if (redirectUri != null) null
-            else responseUri()?.let { ResponseMode.DirectPostJwt(it) }
+        "direct_post.jwt" -> {
+            if (redirectUri != null)
+                null
+            else
+                responseUri()?.let { ResponseMode.DirectPostJwt(it) }
+        }
 
-        "query" ->
-            if (responseUri != null) null
-            else redirectUri()?.let { ResponseMode.Query(it) }
+        "query" -> {
+            if (responseUri != null)
+                null
+            else
+                redirectUri()?.let { ResponseMode.Query(it) }
+        }
 
-        "query.jwt" ->
-            if (responseUri != null) null
-            else redirectUri()?.let { ResponseMode.QueryJwt(it) }
+        "query.jwt" -> {
+            if (responseUri != null)
+                null
+            else
+                redirectUri()?.let { ResponseMode.QueryJwt(it) }
+        }
 
-        null, "fragment" ->
-            if (responseUri != null) null
-            else redirectUri()?.let { ResponseMode.Fragment(it) }
+        null, "fragment" -> {
+            if (responseUri != null)
+                null
+            else
+                redirectUri()?.let { ResponseMode.Fragment(it) }
+        }
 
-        "fragment.jwt" ->
-            if (responseUri != null) null
-            else redirectUri()?.let { ResponseMode.FragmentJwt(it) }
+        "fragment.jwt" -> {
+            if (responseUri != null)
+                null
+            else
+                redirectUri()?.let { ResponseMode.FragmentJwt(it) }
+        }
 
-        else -> null
+        else -> {
+            null
+        }
     }
 }
 
