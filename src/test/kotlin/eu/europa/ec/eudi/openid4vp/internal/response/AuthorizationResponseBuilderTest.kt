@@ -39,116 +39,130 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 class AuthorizationResponseBuilderTest {
-
     internal object Wallet {
-
-        val config = OpenId4VPConfig(
-            supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
-            responseEncryptionConfiguration = ResponseEncryptionConfiguration.Supported(
-                supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
-                supportedMethods = listOf(EncryptionMethod.A256GCM),
-            ),
-            vpFormatsSupported = VpFormatsSupported(
-                VpFormatsSupported.SdJwtVc.HAIP,
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
-            ),
-            clock = Clock.systemDefaultZone(),
-        )
+        val config =
+            OpenId4VPConfig(
+                supportedClientIdPrefixes = listOf(SupportedClientIdPrefix.X509SanDns.NoValidation),
+                responseEncryptionConfiguration =
+                    ResponseEncryptionConfiguration.Supported(
+                        supportedAlgorithms = listOf(JWEAlgorithm.ECDH_ES),
+                        supportedMethods = listOf(EncryptionMethod.A256GCM),
+                    ),
+                vpFormatsSupported =
+                    VpFormatsSupported(
+                        VpFormatsSupported.SdJwtVc.HAIP,
+                        VpFormatsSupported.MsoMdoc(
+                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        ),
+                    ),
+                clock = Clock.systemDefaultZone(),
+            )
     }
 
     internal object Verifier {
+        private val responseEncryptionKeyPair: ECKey =
+            ECKeyGenerator(Curve.P_256)
+                .keyUse(KeyUse.ENCRYPTION)
+                .algorithm(JWEAlgorithm.ECDH_ES)
+                .keyID("123")
+                .generate()
 
-        private val responseEncryptionKeyPair: ECKey = ECKeyGenerator(Curve.P_256)
-            .keyUse(KeyUse.ENCRYPTION)
-            .algorithm(JWEAlgorithm.ECDH_ES)
-            .keyID("123")
-            .generate()
+        val metaDataRequestingNotEncryptedResponse =
+            UnvalidatedClientMetaData(
+                vpFormatsSupported =
+                    VpFormatsSupported(
+                        msoMdoc =
+                            VpFormatsSupported.MsoMdoc(
+                                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            ),
+                    ),
+            )
 
-        val metaDataRequestingNotEncryptedResponse = UnvalidatedClientMetaData(
-            vpFormatsSupported = VpFormatsSupported(
-                msoMdoc = VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
-            ),
-        )
-
-        val metaDataRequestingEncryptedResponse = UnvalidatedClientMetaData(
-            jwks = JWKSet(responseEncryptionKeyPair).toJsonObject(true),
-            responseEncryptionMethodsSupported = listOf(EncryptionMethod.A256GCM.name),
-            vpFormatsSupported = VpFormatsSupported(
-                sdJwtVc = VpFormatsSupported.SdJwtVc.HAIP,
-                msoMdoc = VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                ),
-            ),
-        )
+        val metaDataRequestingEncryptedResponse =
+            UnvalidatedClientMetaData(
+                jwks = JWKSet(responseEncryptionKeyPair).toJsonObject(true),
+                responseEncryptionMethodsSupported = listOf(EncryptionMethod.A256GCM.name),
+                vpFormatsSupported =
+                    VpFormatsSupported(
+                        sdJwtVc = VpFormatsSupported.SdJwtVc.HAIP,
+                        msoMdoc =
+                            VpFormatsSupported.MsoMdoc(
+                                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            ),
+                    ),
+            )
 
         private fun JWKSet.toJsonObject(publicKeysOnly: Boolean = true): JsonObject =
             Json.parseToJsonElement(this.toString(publicKeysOnly)).jsonObject
     }
 
     @Test
-    fun `when direct_post jwt, builder should return DirectPostJwt with response encryption parameters of correct type`() = runTest {
-        fun test(state: String? = null) {
-            val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
-            val query = DCQL(
-                credentials = Credentials(
-                    CredentialQuery.sdJwtVc(
-                        id = QueryId("query_for_identity"),
-                        DCQLMetaSdJwtVcExtensions(
-                            vctValues = listOf("identity_credential"),
+    fun `when direct_post jwt, builder should return DirectPostJwt with response encryption parameters of correct type`() =
+        runTest {
+            fun test(state: String? = null) {
+                val responseMode = ResponseMode.DirectPostJwt("https://respond.here".asHttpsURL().getOrThrow())
+                val query =
+                    DCQL(
+                        credentials =
+                            Credentials(
+                                CredentialQuery.sdJwtVc(
+                                    id = QueryId("query_for_identity"),
+                                    DCQLMetaSdJwtVcExtensions(
+                                        vctValues = listOf("identity_credential"),
+                                    ),
+                                ),
+                            ),
+                    )
+                val verifierMetaData =
+                    assertDoesNotThrow {
+                        ClientMetaDataValidator.validateClientMetaData(
+                            Verifier.metaDataRequestingEncryptedResponse,
+                            responseMode,
+                            query,
+                            Wallet.config.responseEncryptionConfiguration,
+                            Wallet.config.vpFormatsSupported,
+                        )
+                    }
+                val resolvedRequest =
+                    ResolvedRequestObject(
+                        query = query,
+                        responseEncryptionSpecification = verifierMetaData.responseEncryptionSpecification,
+                        vpFormatsSupported =
+                            VpFormatsSupported(
+                                msoMdoc =
+                                    VpFormatsSupported.MsoMdoc(
+                                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                                    ),
+                            ),
+                        client = Client.Preregistered("https%3A%2F%2Fclient.example.org%2Fcb", "Verifier"),
+                        nonce = "0S6_WzA2Mj",
+                        responseMode = responseMode,
+                        state = state,
+                        transactionData = null,
+                        verifierInfo = null,
+                    )
+
+                val vpTokenConsensus =
+                    Consensus.PositiveConsensus(
+                        VerifiablePresentations(
+                            mapOf(
+                                QueryId("pdId") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
+                            ),
                         ),
-                    ),
-                ),
-            )
-            val verifierMetaData = assertDoesNotThrow {
-                ClientMetaDataValidator.validateClientMetaData(
-                    Verifier.metaDataRequestingEncryptedResponse,
-                    responseMode,
-                    query,
-                    Wallet.config.responseEncryptionConfiguration,
-                    Wallet.config.vpFormatsSupported,
-                )
+                    )
+                val response = resolvedRequest.responseWith(vpTokenConsensus, null)
+
+                assertTrue("Response not of the expected type DirectPostJwt") { response is AuthorizationResponse.DirectPostJwt }
+                assertIs<AuthorizationResponse.DirectPostJwt>(response)
+                val responseEncryptionSpecification = response.responseEncryptionSpecification
+                assertNotNull(responseEncryptionSpecification)
             }
-            val resolvedRequest =
-                ResolvedRequestObject(
-                    query = query,
-                    responseEncryptionSpecification = verifierMetaData.responseEncryptionSpecification,
-                    vpFormatsSupported = VpFormatsSupported(
-                        msoMdoc = VpFormatsSupported.MsoMdoc(
-                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        ),
-                    ),
-                    client = Client.Preregistered("https%3A%2F%2Fclient.example.org%2Fcb", "Verifier"),
-                    nonce = "0S6_WzA2Mj",
-                    responseMode = responseMode,
-                    state = state,
-                    transactionData = null,
-                    verifierInfo = null,
-                )
 
-            val vpTokenConsensus = Consensus.PositiveConsensus(
-                VerifiablePresentations(
-                    mapOf(
-                        QueryId("pdId") to listOf(VerifiablePresentation.Generic("dummy_vp_token")),
-                    ),
-                ),
-            )
-            val response = resolvedRequest.responseWith(vpTokenConsensus, null)
-
-            assertTrue("Response not of the expected type DirectPostJwt") { response is AuthorizationResponse.DirectPostJwt }
-            assertIs<AuthorizationResponse.DirectPostJwt>(response)
-            val responseEncryptionSpecification = response.responseEncryptionSpecification
-            assertNotNull(responseEncryptionSpecification)
+            test(genState())
+            test()
         }
-
-        test(genState())
-        test()
-    }
 }

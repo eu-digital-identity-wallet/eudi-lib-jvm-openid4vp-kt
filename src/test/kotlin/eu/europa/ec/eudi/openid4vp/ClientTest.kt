@@ -24,15 +24,18 @@ import kotlin.test.assertEquals
  * Test cases for [Client]
  */
 internal class ClientTest {
-
     @Test
     internal fun `legal name`() {
-        val certificate = ClientTest::class.java.classLoader.getResourceAsStream("certificates/certificates.jks")!!
-            .use { inputStream ->
-                KeyStore.getInstance("JKS").apply {
-                    load(inputStream, "12345".toCharArray())
-                }.getCertificate("verifierexample") as X509Certificate
-            }
+        val certificate =
+            ClientTest::class.java.classLoader
+                .getResourceAsStream("certificates/certificates.jks")!!
+                .use { inputStream ->
+                    KeyStore
+                        .getInstance("JKS")
+                        .apply {
+                            load(inputStream, "12345".toCharArray())
+                        }.getCertificate("verifierexample") as X509Certificate
+                }
         val client = Client.X509SanDns("verifier.example.gr", certificate)
         assertEquals("verifierExample", client.legalName())
     }

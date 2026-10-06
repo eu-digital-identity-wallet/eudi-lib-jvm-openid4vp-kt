@@ -48,18 +48,23 @@ internal class RequestFetcher(
     /**
      * Fetches the authorization request, if needed
      */
-    suspend fun fetchRequest(request: UnvalidatedRequest): ReceivedRequest = when (request) {
-        is UnvalidatedRequest.Plain -> ReceivedRequest.Unsigned(request.requestObject)
-        is UnvalidatedRequest.JwtSecured -> {
-            val (jwt, walletNonce, audience) = when (request) {
-                is UnvalidatedRequest.JwtSecured.PassByValue -> Triple(request.jwt, null, Audience(SelfIssued))
-                is UnvalidatedRequest.JwtSecured.PassByReference -> fetchJwtWalletNonceAndAudience(request)
+    suspend fun fetchRequest(request: UnvalidatedRequest): ReceivedRequest =
+        when (request) {
+            is UnvalidatedRequest.Plain -> {
+                ReceivedRequest.Unsigned(request.requestObject)
             }
-            with(openId4VPConfig) {
-                ensureValid(expectedClient = request.clientId, walletNonce, expectedAudience = audience, unverifiedJwt = jwt)
+
+            is UnvalidatedRequest.JwtSecured -> {
+                val (jwt, walletNonce, audience) =
+                    when (request) {
+                        is UnvalidatedRequest.JwtSecured.PassByValue -> Triple(request.jwt, null, Audience(SelfIssued))
+                        is UnvalidatedRequest.JwtSecured.PassByReference -> fetchJwtWalletNonceAndAudience(request)
+                    }
+                with(openId4VPConfig) {
+                    ensureValid(expectedClient = request.clientId, walletNonce, expectedAudience = audience, unverifiedJwt = jwt)
+                }
             }
         }
-    }
 
     private suspend fun fetchJwtWalletNonceAndAudience(
         request: UnvalidatedRequest.JwtSecured.PassByReference,
@@ -86,19 +91,25 @@ internal class RequestFetcher(
                     is NonceOption.Use -> Nonce(nonceOption.byteLength)
                     NonceOption.DoNotUse -> null
                 }
-            val ephemeralJarEncryptionKey = when (val jarEncryption = postOptions.jarEncryption) {
-                EncryptionRequirement.NotRequired -> null
-                is EncryptionRequirement.Required -> jarEncryption.ephemeralEncryptionKey()
-            }
+            val ephemeralJarEncryptionKey =
+                when (val jarEncryption = postOptions.jarEncryption) {
+                    EncryptionRequirement.NotRequired -> null
+                    is EncryptionRequirement.Required -> jarEncryption.ephemeralEncryptionKey()
+                }
             val walletMetaData =
                 if (postOptions.includeWalletMetadata) {
                     walletMetaData(openId4VPConfig, request.clientId, listOfNotNull(ephemeralJarEncryptionKey))
-                } else null
+                } else {
+                    null
+                }
 
             val jwt = httpClient.postForJAR(requestUri, walletNonce, walletMetaData)
-            val signedJwt = if (postOptions.jarEncryption is EncryptionRequirement.Required) {
-                jwt.decrypt(ephemeralJarEncryptionKey!!, postOptions.jarEncryption).getOrThrow()
-            } else jwt
+            val signedJwt =
+                if (postOptions.jarEncryption is EncryptionRequirement.Required) {
+                    jwt.decrypt(ephemeralJarEncryptionKey!!, postOptions.jarEncryption).getOrThrow()
+                } else {
+                    jwt
+                }
 
             val audience =
                 if (null != walletMetaData) {
@@ -142,7 +153,10 @@ private fun ensureIsSignedJwt(unverifiedJwt: Jwt): SignedJWT =
         throw invalidJwt("JAR JWT parse error")
     }
 
-private fun ensureSameWalletNonce(expectedWalletNonce: Nonce, signedJwt: SignedJWT) {
+private fun ensureSameWalletNonce(
+    expectedWalletNonce: Nonce,
+    signedJwt: SignedJWT,
+) {
     val walletNonce = signedJwt.jwtClaimsSet.getStringClaim(OpenId4VPSpec.WALLET_NONCE)
     ensure(expectedWalletNonce.toString() == walletNonce) {
         invalidJwt("Mismatch of wallet_nonce. Expected $expectedWalletNonce, actual $walletNonce")
@@ -150,9 +164,10 @@ private fun ensureSameWalletNonce(expectedWalletNonce: Nonce, signedJwt: SignedJ
 }
 
 private fun OpenId4VPConfig.ensureSupportedSigningAlgorithm(signedJwt: SignedJWT) {
-    val signingAlg = ensureNotNull(signedJwt.header.algorithm) {
-        invalidJwt("JAR is missing alg claim from header")
-    }
+    val signingAlg =
+        ensureNotNull(signedJwt.header.algorithm) {
+            invalidJwt("JAR is missing alg claim from header")
+        }
     ensure(signingAlg in signedRequestConfiguration.supportedAlgorithms) {
         invalidJwt("JAR is signed with ${signingAlg.name} which is not supported")
     }
@@ -169,8 +184,7 @@ private fun ensureSameClientId(
     return expectedClientId
 }
 
-private fun invalidJwt(cause: String): AuthorizationRequestException =
-    RequestValidationError.InvalidJarJwt(cause).asException()
+private fun invalidJwt(cause: String): AuthorizationRequestException = RequestValidationError.InvalidJarJwt(cause).asException()
 
 private fun unsupportedRequestUriMethod(m: RequestUriMethod): AuthorizationRequestException =
     RequestValidationError.UnsupportedRequestUriMethod(m).asException()
@@ -209,23 +223,28 @@ private fun HttpRequestBuilder.addAcceptContentTypeJwt() {
 
 private const val CONTENT_TYPE_JWT = "JWT"
 
-private fun Jwt.decrypt(recipientKey: ECKey, jarEncryption: EncryptionRequirement.Required): Result<Jwt> = runCatchingCancellable {
-    val jwe = JWEObject.parse(this)
-    require(CONTENT_TYPE_JWT == jwe.header.contentType) { "JWEObject must contain a JWT Payload" }
-    require(jarEncryption.supportedEncryptionAlgorithms.contains(jwe.header.algorithm)) {
-        "JWEObject must contain a supported encryption algorithm"
-    }
-    require(jarEncryption.supportedEncryptionMethods.contains(jwe.header.encryptionMethod)) {
-        "JWEObject must contain a supported encryption method"
-    }
-    val decrypter = DefaultJWEDecrypterFactory().createJWEDecrypter(jwe.header, recipientKey.toPrivateKey())
-    val payload = with(decrypter) {
-        jwe.decrypt(this)
-        jwe.payload
-    }
+private fun Jwt.decrypt(
+    recipientKey: ECKey,
+    jarEncryption: EncryptionRequirement.Required,
+): Result<Jwt> =
+    runCatchingCancellable {
+        val jwe = JWEObject.parse(this)
+        require(CONTENT_TYPE_JWT == jwe.header.contentType) { "JWEObject must contain a JWT Payload" }
+        require(jarEncryption.supportedEncryptionAlgorithms.contains(jwe.header.algorithm)) {
+            "JWEObject must contain a supported encryption algorithm"
+        }
+        require(jarEncryption.supportedEncryptionMethods.contains(jwe.header.encryptionMethod)) {
+            "JWEObject must contain a supported encryption method"
+        }
+        val decrypter = DefaultJWEDecrypterFactory().createJWEDecrypter(jwe.header, recipientKey.toPrivateKey())
+        val payload =
+            with(decrypter) {
+                jwe.decrypt(this)
+                jwe.payload
+            }
 
-    payload.toString()
-}
+        payload.toString()
+    }
 
 internal suspend fun EncryptionRequirement.Required.ephemeralEncryptionKey(): ECKey =
     withContext(Dispatchers.IO) {
@@ -234,7 +253,10 @@ internal suspend fun EncryptionRequirement.Required.ephemeralEncryptionKey(): EC
             .generate()
     }
 
-private fun ensureSameAudience(expectedAudience: Audience, signedJwt: SignedJWT) {
+private fun ensureSameAudience(
+    expectedAudience: Audience,
+    signedJwt: SignedJWT,
+) {
     val jwtAudience = signedJwt.jwtClaimsSet.audience
     ensure(!jwtAudience.isNullOrEmpty()) {
         invalidJwt("JAR is missing '${RFC7519.AUDIENCE}'")
