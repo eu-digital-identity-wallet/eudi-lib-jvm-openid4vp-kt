@@ -18,21 +18,21 @@ package eu.europa.ec.eudi.openid4vp.internal
 import eu.europa.ec.eudi.openid4vp.runCatchingCancellable
 import java.security.cert.X509Certificate
 
-fun X509Certificate.sanOfUniformResourceIdentifier(): Result<List<String>> =
-    san(X509SubjectAlternativeNameType.UniformResourceIdentifier)
-fun X509Certificate.sanOfDNSName(): Result<List<String>> =
-    san(X509SubjectAlternativeNameType.DNSName)
+fun X509Certificate.sanOfUniformResourceIdentifier(): Result<List<String>> = san(X509SubjectAlternativeNameType.UniformResourceIdentifier)
 
-private fun X509Certificate.san(type: X509SubjectAlternativeNameType): Result<List<String>> = runCatchingCancellable {
-    buildList {
-        subjectAlternativeNames
-            ?.filter { subjectAltNames -> !subjectAltNames.isNullOrEmpty() && subjectAltNames.size == 2 }
-            ?.forEach { entry ->
-                val altNameType = entry[0] as Int
-                entry[1].takeIf { altNameType == type.asInt() }?.let { add(it as String) }
-            }
+fun X509Certificate.sanOfDNSName(): Result<List<String>> = san(X509SubjectAlternativeNameType.DNSName)
+
+private fun X509Certificate.san(type: X509SubjectAlternativeNameType): Result<List<String>> =
+    runCatchingCancellable {
+        buildList {
+            subjectAlternativeNames
+                ?.filter { subjectAltNames -> !subjectAltNames.isNullOrEmpty() && subjectAltNames.size == 2 }
+                ?.forEach { entry ->
+                    val altNameType = entry[0] as Int
+                    entry[1].takeIf { altNameType == type.asInt() }?.let { add(it as String) }
+                }
+        }
     }
-}
 
 private enum class X509SubjectAlternativeNameType {
     UniformResourceIdentifier,
@@ -40,7 +40,8 @@ private enum class X509SubjectAlternativeNameType {
 }
 
 // https://www.rfc-editor.org/rfc/rfc5280.html
-private fun X509SubjectAlternativeNameType.asInt() = when (this) {
-    X509SubjectAlternativeNameType.UniformResourceIdentifier -> 6
-    X509SubjectAlternativeNameType.DNSName -> 2
-}
+private fun X509SubjectAlternativeNameType.asInt() =
+    when (this) {
+        X509SubjectAlternativeNameType.UniformResourceIdentifier -> 6
+        X509SubjectAlternativeNameType.DNSName -> 2
+    }

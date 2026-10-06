@@ -18,10 +18,11 @@ package eu.europa.ec.eudi.openid4vp.internal
 import com.nimbusds.jose.util.JSONObjectUtils
 import kotlinx.serialization.json.*
 
-internal val jsonSupport = Json {
-    prettyPrint = false
-    ignoreUnknownKeys = true
-}
+internal val jsonSupport =
+    Json {
+        prettyPrint = false
+        ignoreUnknownKeys = true
+    }
 
 internal fun JsonObject.requiredString(name: String): String {
     val value = this[name]
