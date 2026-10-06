@@ -145,6 +145,6 @@ dependencyCheck {
     formats = mutableListOf("XML", "HTML")
 
     nvd {
-        apiKey = System.getenv("NVD_API_KEY") ?: properties["nvdApiKey"]?.toString() ?: ""
+        apiKey = System.getenv("NVD_API_KEY") ?: findProperty("nvdApiKey")?.toString() ?: ""
     }
 }
