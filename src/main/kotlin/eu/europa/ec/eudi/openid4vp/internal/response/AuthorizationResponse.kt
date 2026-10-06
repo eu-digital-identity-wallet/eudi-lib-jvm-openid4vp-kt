@@ -28,7 +28,6 @@ import java.net.URL
  * The payload of an [AuthorizationResponse]
  */
 internal sealed interface AuthorizationResponsePayload : java.io.Serializable {
-
     val nonce: String?
     val state: String?
     val clientId: VerifierId?
@@ -92,50 +91,62 @@ private const val VP_TOKEN_FORM_PARAM = "vp_token"
  */
 internal fun AuthorizationResponsePayload.asDispatchingMap(): Map<String, String> =
     when (this) {
-        is AuthorizationResponsePayload.Success -> buildMap {
-            put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asParam())
-            state?.let {
-                put(OpenId4VPSpec.STATE, it)
+        is AuthorizationResponsePayload.Success -> {
+            buildMap {
+                put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asParam())
+                state?.let {
+                    put(OpenId4VPSpec.STATE, it)
+                }
             }
         }
 
-        is AuthorizationResponsePayload.InvalidRequest -> buildMap {
-            put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.fromError(error).code)
-            put(OpenId4VPSpec.ERROR_DESCRIPTION, "$error")
-            state?.let {
-                put(OpenId4VPSpec.STATE, it)
+        is AuthorizationResponsePayload.InvalidRequest -> {
+            buildMap {
+                put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.fromError(error).code)
+                put(OpenId4VPSpec.ERROR_DESCRIPTION, "$error")
+                state?.let {
+                    put(OpenId4VPSpec.STATE, it)
+                }
             }
         }
 
-        is AuthorizationResponsePayload.NoConsensusResponseData -> buildMap {
-            put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.ACCESS_DENIED.code)
-            state?.let {
-                put(OpenId4VPSpec.STATE, it)
+        is AuthorizationResponsePayload.NoConsensusResponseData -> {
+            buildMap {
+                put(OpenId4VPSpec.ERROR, AuthorizationRequestErrorCode.ACCESS_DENIED.code)
+                state?.let {
+                    put(OpenId4VPSpec.STATE, it)
+                }
             }
         }
     }
 
 internal fun AuthorizationResponsePayload.asJsonObject(): JsonObject =
     when (this) {
-        is AuthorizationResponsePayload.Success -> buildJsonObject {
-            put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asJsonObject())
-            state?.let {
-                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+        is AuthorizationResponsePayload.Success -> {
+            buildJsonObject {
+                put(VP_TOKEN_FORM_PARAM, verifiablePresentations.asJsonObject())
+                state?.let {
+                    put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+                }
             }
         }
 
-        is AuthorizationResponsePayload.InvalidRequest -> buildJsonObject {
-            put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.fromError(error).code))
-            put(OpenId4VPSpec.ERROR_DESCRIPTION, JsonPrimitive("$error"))
-            state?.let {
-                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+        is AuthorizationResponsePayload.InvalidRequest -> {
+            buildJsonObject {
+                put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.fromError(error).code))
+                put(OpenId4VPSpec.ERROR_DESCRIPTION, JsonPrimitive("$error"))
+                state?.let {
+                    put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+                }
             }
         }
 
-        is AuthorizationResponsePayload.NoConsensusResponseData -> buildJsonObject {
-            put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.ACCESS_DENIED.code))
-            state?.let {
-                put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+        is AuthorizationResponsePayload.NoConsensusResponseData -> {
+            buildJsonObject {
+                put(OpenId4VPSpec.ERROR, JsonPrimitive(AuthorizationRequestErrorCode.ACCESS_DENIED.code))
+                state?.let {
+                    put(OpenId4VPSpec.STATE, JsonPrimitive(it))
+                }
             }
         }
     }
@@ -144,7 +155,6 @@ internal fun AuthorizationResponsePayload.asJsonObject(): JsonObject =
  * An OAUTH2 authorization response
  */
 internal sealed interface AuthorizationResponse : java.io.Serializable {
-
     /**
      * An authorization response to be communicated to verifier/RP via direct_post method
      *
@@ -262,54 +272,74 @@ internal fun ResolvedRequestObject.responseWith(
 private fun ResolvedRequestObject.responsePayload(
     consensus: Consensus,
     encryptionParameters: EncryptionParameters?,
-): AuthorizationResponsePayload = when (consensus) {
-    is Consensus.NegativeConsensus ->
-        AuthorizationResponsePayload.NoConsensusResponseData(
-            nonce,
-            state,
-            client.id,
-            encryptionParameters,
-        )
+): AuthorizationResponsePayload =
+    when (consensus) {
+        is Consensus.NegativeConsensus -> {
+            AuthorizationResponsePayload.NoConsensusResponseData(
+                nonce,
+                state,
+                client.id,
+                encryptionParameters,
+            )
+        }
 
-    is Consensus.PositiveConsensus -> {
-        AuthorizationResponsePayload.Success(
-            consensus.verifiablePresentations,
-            nonce,
-            state,
-            client.id,
-            encryptionParameters,
-        )
+        is Consensus.PositiveConsensus -> {
+            AuthorizationResponsePayload.Success(
+                consensus.verifiablePresentations,
+                nonce,
+                state,
+                client.id,
+                encryptionParameters,
+            )
+        }
     }
-}
 
-private fun ResolvedRequestObject.responseWith(
-    data: AuthorizationResponsePayload,
-): AuthorizationResponse =
+private fun ResolvedRequestObject.responseWith(data: AuthorizationResponsePayload): AuthorizationResponse =
     when (val mode = responseMode) {
-        is ResponseMode.DirectPost -> AuthorizationResponse.DirectPost(mode.responseURI, data)
-        is ResponseMode.DirectPostJwt -> AuthorizationResponse.DirectPostJwt(
-            mode.responseURI,
-            data,
-            checkNotNull(responseEncryptionSpecification),
-        )
+        is ResponseMode.DirectPost -> {
+            AuthorizationResponse.DirectPost(mode.responseURI, data)
+        }
 
-        is ResponseMode.Fragment -> AuthorizationResponse.Fragment(mode.redirectUri, data)
-        is ResponseMode.FragmentJwt -> AuthorizationResponse.FragmentJwt(
-            mode.redirectUri,
-            data,
-            checkNotNull(responseEncryptionSpecification),
-        )
+        is ResponseMode.DirectPostJwt -> {
+            AuthorizationResponse.DirectPostJwt(
+                mode.responseURI,
+                data,
+                checkNotNull(responseEncryptionSpecification),
+            )
+        }
 
-        is ResponseMode.Query -> AuthorizationResponse.Query(mode.redirectUri, data)
-        is ResponseMode.QueryJwt -> AuthorizationResponse.QueryJwt(
-            mode.redirectUri,
-            data,
-            checkNotNull(responseEncryptionSpecification),
-        )
+        is ResponseMode.Fragment -> {
+            AuthorizationResponse.Fragment(mode.redirectUri, data)
+        }
 
-        ResponseMode.DCApi -> DCApi(data)
-        ResponseMode.DCApiJwt -> DCApiJwt(
-            data,
-            checkNotNull(responseEncryptionSpecification),
-        )
+        is ResponseMode.FragmentJwt -> {
+            AuthorizationResponse.FragmentJwt(
+                mode.redirectUri,
+                data,
+                checkNotNull(responseEncryptionSpecification),
+            )
+        }
+
+        is ResponseMode.Query -> {
+            AuthorizationResponse.Query(mode.redirectUri, data)
+        }
+
+        is ResponseMode.QueryJwt -> {
+            AuthorizationResponse.QueryJwt(
+                mode.redirectUri,
+                data,
+                checkNotNull(responseEncryptionSpecification),
+            )
+        }
+
+        ResponseMode.DCApi -> {
+            DCApi(data)
+        }
+
+        ResponseMode.DCApiJwt -> {
+            DCApiJwt(
+                data,
+                checkNotNull(responseEncryptionSpecification),
+            )
+        }
     }

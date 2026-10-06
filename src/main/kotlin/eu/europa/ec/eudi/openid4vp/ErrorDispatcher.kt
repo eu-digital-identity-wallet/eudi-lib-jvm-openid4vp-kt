@@ -20,20 +20,20 @@ package eu.europa.ec.eudi.openid4vp
  * that occurred during the authorization request resolution and then dispatches it to the verifier
  */
 interface ErrorDispatcher {
-
     suspend fun dispatchError(
         error: AuthorizationRequestError,
         errorDispatchDetails: ErrorDispatchDetails,
         encryptionParameters: EncryptionParameters?,
-    ): DispatchOutcome = when (errorDispatchDetails.responseMode) {
-        is ResponseMode.DirectPost -> post(error, errorDispatchDetails, encryptionParameters)
-        is ResponseMode.DirectPostJwt -> post(error, errorDispatchDetails, encryptionParameters)
-        is ResponseMode.Query -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
-        is ResponseMode.QueryJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
-        is ResponseMode.Fragment -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
-        is ResponseMode.FragmentJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
-        else -> error("Unsupported response mode: ${errorDispatchDetails.responseMode} for error dispatching over HTTP")
-    }
+    ): DispatchOutcome =
+        when (errorDispatchDetails.responseMode) {
+            is ResponseMode.DirectPost -> post(error, errorDispatchDetails, encryptionParameters)
+            is ResponseMode.DirectPostJwt -> post(error, errorDispatchDetails, encryptionParameters)
+            is ResponseMode.Query -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
+            is ResponseMode.QueryJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
+            is ResponseMode.Fragment -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
+            is ResponseMode.FragmentJwt -> encodeRedirectURI(error, errorDispatchDetails, encryptionParameters)
+            else -> error("Unsupported response mode: ${errorDispatchDetails.responseMode} for error dispatching over HTTP")
+        }
 
     /**
      * Method forms a suitable authorization response, based on the [error] and the provided [errorDispatchDetails], then
