@@ -1,5 +1,6 @@
 import com.vanniktech.maven.publish.JavadocJar
 import com.vanniktech.maven.publish.KotlinJvm
+import com.vanniktech.maven.publish.SourcesJar
 import org.jetbrains.dokka.gradle.engine.parameters.VisibilityModifier
 import org.jetbrains.kotlin.gradle.dsl.KotlinVersion
 import java.net.URI
@@ -68,14 +69,16 @@ kotlin {
     }
     compilerOptions {
         apiVersion = KotlinVersion.DEFAULT
-        optIn = listOf(
-            "kotlinx.serialization.ExperimentalSerializationApi",
-            "kotlin.contracts.ExperimentalContracts",
-            "kotlin.io.encoding.ExperimentalEncodingApi",
-        )
-        freeCompilerArgs = listOf(
-            "-Xconsistent-data-class-copy-visibility",
-        )
+        optIn =
+            listOf(
+                "kotlinx.serialization.ExperimentalSerializationApi",
+                "kotlin.contracts.ExperimentalContracts",
+                "kotlin.io.encoding.ExperimentalEncodingApi",
+            )
+        freeCompilerArgs =
+            listOf(
+                "-Xconsistent-data-class-copy-visibility",
+            )
     }
 }
 
@@ -130,7 +133,7 @@ dokka {
 }
 
 mavenPublishing {
-    configure(KotlinJvm(javadocJar = JavadocJar.Dokka(tasks.dokkaGeneratePublicationHtml), sourcesJar = true))
+    configure(KotlinJvm(javadocJar = JavadocJar.Dokka(tasks.dokkaGeneratePublicationHtml), sourcesJar = SourcesJar.Sources()))
 
     pom {
         ciManagement {

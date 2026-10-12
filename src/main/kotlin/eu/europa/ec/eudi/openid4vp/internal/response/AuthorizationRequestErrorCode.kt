@@ -21,8 +21,9 @@ import eu.europa.ec.eudi.openid4vp.HttpError
 import eu.europa.ec.eudi.openid4vp.RequestValidationError.*
 import eu.europa.ec.eudi.openid4vp.ResolutionError.*
 
-internal enum class AuthorizationRequestErrorCode(val code: String) {
-
+internal enum class AuthorizationRequestErrorCode(
+    val code: String,
+) {
     // OAuth2.0 & OpenID4VP
 
     /**
@@ -77,6 +78,7 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
     INVALID_TRANSACTION_DATA("invalid_transaction_data"),
 
     // JAR errors
+
     /**
      * The request_uri in the authorization request returns an error or contains invalid data
      */
@@ -96,12 +98,11 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
     ;
 
     companion object {
-
         /**
          * Maps an [error] into a [AuthorizationRequestErrorCode]
          */
-        fun fromError(error: AuthorizationRequestError): AuthorizationRequestErrorCode {
-            return when (error) {
+        fun fromError(error: AuthorizationRequestError): AuthorizationRequestErrorCode =
+            when (error) {
                 is UnknownScope -> INVALID_SCOPE
 
                 is InvalidClientIdPrefix,
@@ -147,6 +148,7 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
                 is InvalidRequestUriMethod -> INVALID_REQUEST_URI_METHOD
 
                 is UnableToFetchRequestObject -> INVALID_REQUEST_URI
+
                 is InvalidJarJwt -> INVALID_REQUEST_OBJECT
 
                 is DIDResolutionFailed,
@@ -156,6 +158,5 @@ internal enum class AuthorizationRequestErrorCode(val code: String) {
 
                 ClientVpFormatsNotSupportedFromWallet -> VP_FORMATS_NOT_SUPPORTED
             }
-        }
     }
 }

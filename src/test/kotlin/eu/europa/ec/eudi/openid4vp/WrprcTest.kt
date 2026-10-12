@@ -35,75 +35,86 @@ import kotlin.test.assertEquals
 import kotlin.test.assertIs
 
 class WrprcTest {
-
     val wrprcValid = load("certificates/wrprc.txt").bufferedReader().readText()
 
     val didAlgAndKey = randomKey()
 
-    val dcqlQuery = load("dcql/basic_example.json").bufferedReader().readText()
-        .replace("\r\n", "")
-        .replace("\r", "")
-        .replace("\n", "")
-        .replace("  ", "")
+    val dcqlQuery =
+        load("dcql/basic_example.json")
+            .bufferedReader()
+            .readText()
+            .replace("\r\n", "")
+            .replace("\r", "")
+            .replace("\n", "")
+            .replace("  ", "")
 
-    private val unvalidatedClientMetaData = UnvalidatedClientMetaData(
-        vpFormatsSupported = VpFormatsSupported(
-            msoMdoc =
-                VpFormatsSupported.MsoMdoc(
-                    issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                    deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+    private val unvalidatedClientMetaData =
+        UnvalidatedClientMetaData(
+            vpFormatsSupported =
+                VpFormatsSupported(
+                    msoMdoc =
+                        VpFormatsSupported.MsoMdoc(
+                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        ),
+                    sdJwtVc =
+                        VpFormatsSupported.SdJwtVc(
+                            sdJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
+                            kbJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
+                        ),
                 ),
-            sdJwtVc = VpFormatsSupported.SdJwtVc(
-                sdJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
-                kbJwtAlgorithms = listOf(JWSAlgorithm.ES512, JWSAlgorithm.ES256),
-            ),
-        ),
-    )
+        )
 
-    private val walletConfig = OpenId4VPConfig(
-        supportedClientIdPrefixes = listOf(
-            SupportedClientIdPrefix.X509Hash({ _ -> true }),
-            SupportedClientIdPrefix.DecentralizedIdentifier({ _ -> didAlgAndKey.second.toECPublicKey() }),
-        ),
-        signedRequestConfiguration = SignedRequestConfiguration(
-            supportedAlgorithms = listOf(JWSAlgorithm.RS256),
-            multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
-        ),
-        vpFormatsSupported = VpFormatsSupported(
-            VpFormatsSupported.SdJwtVc(
-                sdJwtAlgorithms = listOf(
-                    JWSAlgorithm.ES512,
-                    JWSAlgorithm.ES256,
+    private val walletConfig =
+        OpenId4VPConfig(
+            supportedClientIdPrefixes =
+                listOf(
+                    SupportedClientIdPrefix.X509Hash({ _ -> true }),
+                    SupportedClientIdPrefix.DecentralizedIdentifier({ _ -> didAlgAndKey.second.toECPublicKey() }),
                 ),
-                kbJwtAlgorithms = listOf(
-                    JWSAlgorithm.ES512,
-                    JWSAlgorithm.ES256,
+            signedRequestConfiguration =
+                SignedRequestConfiguration(
+                    supportedAlgorithms = listOf(JWSAlgorithm.RS256),
+                    multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
                 ),
-            ),
-            VpFormatsSupported.MsoMdoc(
-                issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-            ),
-        ),
-        clock = Clock.systemDefaultZone(),
-    )
+            vpFormatsSupported =
+                VpFormatsSupported(
+                    VpFormatsSupported.SdJwtVc(
+                        sdJwtAlgorithms =
+                            listOf(
+                                JWSAlgorithm.ES512,
+                                JWSAlgorithm.ES256,
+                            ),
+                        kbJwtAlgorithms =
+                            listOf(
+                                JWSAlgorithm.ES512,
+                                JWSAlgorithm.ES256,
+                            ),
+                    ),
+                    VpFormatsSupported.MsoMdoc(
+                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                    ),
+                ),
+            clock = Clock.systemDefaultZone(),
+        )
 
     @DisplayName("when authorization request comes over redirects channel")
     @Nested
     @TestInstance(TestInstance.Lifecycle.PER_CLASS)
     inner class WrpRcVerificationRedirectsTest {
-
         private val json: Json by lazy { Json { ignoreUnknownKeys = true } }
         private lateinit var httpClient: HttpClient
 
         @BeforeAll
         fun setup() {
-            httpClient = HttpClient {
-                install(ContentNegotiation) {
-                    json(json)
+            httpClient =
+                HttpClient {
+                    install(ContentNegotiation) {
+                        json(json)
+                    }
+                    expectSuccess = true
                 }
-                expectSuccess = true
-            }
         }
 
         @AfterAll
@@ -111,263 +122,317 @@ class WrprcTest {
             httpClient.close()
         }
 
-        private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverRedirects =
-            OpenId4Vp.overRedirects(walletConfig, httpClient)
+        private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverRedirects = OpenId4Vp.overRedirects(walletConfig, httpClient)
 
         @Test
-        fun `and registration policy is not set, requests without WRPRC can be resolved`() = runTest {
-            val openId4Vp = openId4Vp(walletConfig)
+        fun `and registration policy is not set, requests without WRPRC can be resolved`() =
+            runTest {
+                val openId4Vp = openId4Vp(walletConfig)
 
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
 
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                clientMetadata = unvalidatedClientMetaData,
-                dcqlQuery = dcqlQuery,
-                verifierInfo = null,
-            ).signWithKeystore()
+                val signedJwt =
+                    unvalidatedRequestOverRedirects(
+                        clientId = clientId,
+                        clientMetadata = unvalidatedClientMetaData,
+                        dcqlQuery = dcqlQuery,
+                        verifierInfo = null,
+                    ).signWithKeystore()
 
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
-            val resolution = openId4Vp.resolveRequestUri(authRequest)
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+                val resolution = openId4Vp.resolveRequestUri(authRequest)
 
-            assertIs<Resolution.Success>(resolution)
-            assert(resolution.policyViolationWarnings.isEmpty())
-        }
-
-        @Test
-        fun `and registration policy is set, requests without WRPRC cannot be resolved`() = runTest {
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
-            )
-
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
-
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = null,
-            ).signWithKeystore()
-
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
-            val resolution = openId4Vp.resolveRequestUri(authRequest)
-
-            assertIs<Resolution.Invalid>(resolution)
-            assertIs<AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate>(resolution.error)
-        }
+                assertIs<Resolution.Success>(resolution)
+                assert(resolution.policyViolationWarnings.isEmpty())
+            }
 
         @Test
-        fun `and wrprc policy evaluation has violation warnings, resolution succeeds and warnings are reflected in Resolution`() = runTest {
-            val policyViolationWarnings = listOf(
-                PolicyViolation("violation 1"),
-                PolicyViolation("violation warning 2"),
-                PolicyViolation("violation warning 3"),
-            )
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
-            )
+        fun `and registration policy is set, requests without WRPRC cannot be resolved`() =
+            runTest {
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
+                    )
 
-            val verifierInfo = VerifierInfo(
-                listOf(
-                    VerifierInfo.Attestation(
-                        VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                        VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                    ),
-                ),
-            )
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
 
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
+                val signedJwt =
+                    unvalidatedRequestOverRedirects(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = null,
+                    ).signWithKeystore()
 
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = verifierInfo,
-            ).signWithKeystore()
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+                val resolution = openId4Vp.resolveRequestUri(authRequest)
 
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
-            val resolution = openId4Vp.resolveRequestUri(authRequest)
-
-            assertIs<Resolution.Success>(resolution)
-            assertNotNull(resolution.policyViolationWarnings)
-            assertEquals(policyViolationWarnings, resolution.policyViolationWarnings)
-        }
+                assertIs<Resolution.Invalid>(resolution)
+                assertIs<AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate>(resolution.error)
+            }
 
         @Test
-        fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() = runTest {
-            val policyViolationError = PolicyViolation("Policy violated")
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
-            )
-            val verifierInfo = VerifierInfo(
-                listOf(
-                    VerifierInfo.Attestation(
-                        VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                        VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                    ),
-                ),
-            )
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
+        fun `and wrprc policy evaluation has violation warnings, resolution succeeds and warnings are reflected in Resolution`() =
+            runTest {
+                val policyViolationWarnings =
+                    listOf(
+                        PolicyViolation("violation 1"),
+                        PolicyViolation("violation warning 2"),
+                        PolicyViolation("violation warning 3"),
+                    )
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy {
+                            _,
+                            _,
+                            _,
+                            ->
+                            RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings)
+                        },
+                    )
 
-            val signedJwt = unvalidatedRequestOverRedirects(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = verifierInfo,
-            ).signWithKeystore()
+                val verifierInfo =
+                    VerifierInfo(
+                        listOf(
+                            VerifierInfo.Attestation(
+                                VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                                VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                            ),
+                        ),
+                    )
 
-            val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
-            val resolution = openId4Vp.resolveRequestUri(authRequest)
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
 
-            assertIs<Resolution.Invalid>(resolution)
-            assertIs<AuthorizationPolicyValidationError.AuthorizationPolicyNotMet>(resolution.error)
-        }
+                val signedJwt =
+                    unvalidatedRequestOverRedirects(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = verifierInfo,
+                    ).signWithKeystore()
+
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+                val resolution = openId4Vp.resolveRequestUri(authRequest)
+
+                assertIs<Resolution.Success>(resolution)
+                assertNotNull(resolution.policyViolationWarnings)
+                assertEquals(policyViolationWarnings, resolution.policyViolationWarnings)
+            }
+
+        @Test
+        fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() =
+            runTest {
+                val policyViolationError = PolicyViolation("Policy violated")
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy {
+                            _,
+                            _,
+                            _,
+                            ->
+                            RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError)
+                        },
+                    )
+                val verifierInfo =
+                    VerifierInfo(
+                        listOf(
+                            VerifierInfo.Attestation(
+                                VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                                VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                            ),
+                        ),
+                    )
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val clientIdEncoded = URLEncoder.encode(clientId, "UTF-8")
+
+                val signedJwt =
+                    unvalidatedRequestOverRedirects(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = verifierInfo,
+                    ).signWithKeystore()
+
+                val authRequest = "http://localhost:8080/public_url?client_id=$clientIdEncoded&request=$signedJwt"
+                val resolution = openId4Vp.resolveRequestUri(authRequest)
+
+                assertIs<Resolution.Invalid>(resolution)
+                assertIs<AuthorizationPolicyValidationError.AuthorizationPolicyNotMet>(resolution.error)
+            }
     }
 
     @DisplayName("when authorization request comes through DC API channel")
     @Nested
     inner class WrpRcVerificationDCApiTest {
+        private val origin = "https://verifier.example.gr"
 
-        private val ORIGIN = "https://verifier.example.gr"
-
-        private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverDcAPI =
-            OpenId4Vp.overDcApi(walletConfig)
+        private fun openId4Vp(walletConfig: OpenId4VPConfig): OpenId4Vp.OverDcAPI = OpenId4Vp.overDcApi(walletConfig)
 
         @Test
-        fun `and registration policy is not set, requests without WRPRC can be resolved`() = runTest {
-            val openId4Vp = openId4Vp(walletConfig)
+        fun `and registration policy is not set, requests without WRPRC can be resolved`() =
+            runTest {
+                val openId4Vp = openId4Vp(walletConfig)
 
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val signedJwt = unvalidatedRequestOverDCApi(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                expectedOrigins = listOf(ORIGIN),
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = null,
-            ).signWithKeystore()
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val signedJwt =
+                    unvalidatedRequestOverDCApi(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        expectedOrigins = listOf(origin),
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = null,
+                    ).signWithKeystore()
 
-            val resolution = openId4Vp.resolveRequestObject(
-                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
-                ORIGIN,
-                buildJsonObject {
-                    put("request", signedJwt)
-                },
-            )
+                val resolution =
+                    openId4Vp.resolveRequestObject(
+                        OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                        origin,
+                        buildJsonObject {
+                            put("request", signedJwt)
+                        },
+                    )
 
-            assertIs<Resolution.Success>(resolution)
-            assert(resolution.policyViolationWarnings.isEmpty())
-        }
-
-        @Test
-        fun `and registration policy is set, requests without WRPRC cannot be resolved`() = runTest {
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
-            )
-
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val signedJwt = unvalidatedRequestOverDCApi(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                expectedOrigins = listOf(ORIGIN),
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = null,
-            ).signWithKeystore()
-
-            val resolution = openId4Vp.resolveRequestObject(
-                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
-                ORIGIN,
-                buildJsonObject {
-                    put("request", signedJwt)
-                },
-            )
-            assertIs<Resolution.Invalid>(resolution)
-            assertIs<AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate>(resolution.error)
-        }
+                assertIs<Resolution.Success>(resolution)
+                assert(resolution.policyViolationWarnings.isEmpty())
+            }
 
         @Test
-        fun `and wrprc policy evaluation has violation warnings, resolution succeeds and warnings are reflected in Resolution`() = runTest {
-            val policyViolationWarnings = listOf(
-                PolicyViolation("violation warning 1"),
-                PolicyViolation("violation warning 2"),
-                PolicyViolation("violation warning 3"),
-            )
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings) },
-            )
-            val verifierInfo = VerifierInfo(
-                listOf(
-                    VerifierInfo.Attestation(
-                        VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                        VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                    ),
-                ),
-            )
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val signedJwt = unvalidatedRequestOverDCApi(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                expectedOrigins = listOf(ORIGIN),
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = verifierInfo,
-            ).signWithKeystore()
+        fun `and registration policy is set, requests without WRPRC cannot be resolved`() =
+            runTest {
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() },
+                    )
 
-            val resolution = openId4Vp.resolveRequestObject(
-                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
-                ORIGIN,
-                buildJsonObject {
-                    put("request", signedJwt)
-                },
-            )
-            assertIs<Resolution.Success>(resolution)
-            assertNotNull(resolution.policyViolationWarnings)
-            assertEquals(policyViolationWarnings, resolution.policyViolationWarnings)
-        }
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val signedJwt =
+                    unvalidatedRequestOverDCApi(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        expectedOrigins = listOf(origin),
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = null,
+                    ).signWithKeystore()
+
+                val resolution =
+                    openId4Vp.resolveRequestObject(
+                        OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                        origin,
+                        buildJsonObject {
+                            put("request", signedJwt)
+                        },
+                    )
+                assertIs<Resolution.Invalid>(resolution)
+                assertIs<AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate>(resolution.error)
+            }
 
         @Test
-        fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() = runTest {
-            val policyViolationError = PolicyViolation("Policy violated")
-            val openId4Vp = openId4Vp(
-                walletConfig.withWrprcPolicy { _, _, _ -> RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError) },
-            )
-            val verifierInfo = VerifierInfo(
-                listOf(
-                    VerifierInfo.Attestation(
-                        VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                        VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                    ),
-                ),
-            )
-            val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
-            val signedJwt = unvalidatedRequestOverDCApi(
-                clientId = clientId,
-                dcqlQuery = dcqlQuery,
-                expectedOrigins = listOf(ORIGIN),
-                clientMetadata = unvalidatedClientMetaData,
-                verifierInfo = verifierInfo,
-            ).signWithKeystore()
+        fun `and wrprc policy evaluation has violation warnings, resolution succeeds and warnings are reflected in Resolution`() =
+            runTest {
+                val policyViolationWarnings =
+                    listOf(
+                        PolicyViolation("violation warning 1"),
+                        PolicyViolation("violation warning 2"),
+                        PolicyViolation("violation warning 3"),
+                    )
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy {
+                            _,
+                            _,
+                            _,
+                            ->
+                            RegistrationCertificatePolicy.Authorization.Granted(policyViolationWarnings)
+                        },
+                    )
+                val verifierInfo =
+                    VerifierInfo(
+                        listOf(
+                            VerifierInfo.Attestation(
+                                VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                                VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                            ),
+                        ),
+                    )
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val signedJwt =
+                    unvalidatedRequestOverDCApi(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        expectedOrigins = listOf(origin),
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = verifierInfo,
+                    ).signWithKeystore()
 
-            val resolution = openId4Vp.resolveRequestObject(
-                OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
-                ORIGIN,
-                buildJsonObject {
-                    put("request", signedJwt)
-                },
-            )
+                val resolution =
+                    openId4Vp.resolveRequestObject(
+                        OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                        origin,
+                        buildJsonObject {
+                            put("request", signedJwt)
+                        },
+                    )
+                assertIs<Resolution.Success>(resolution)
+                assertNotNull(resolution.policyViolationWarnings)
+                assertEquals(policyViolationWarnings, resolution.policyViolationWarnings)
+            }
 
-            assertIs<Resolution.Invalid>(resolution)
-            assertIs<AuthorizationPolicyValidationError.AuthorizationPolicyNotMet>(resolution.error)
-        }
+        @Test
+        fun `and wrprc policy evaluation fails, resolution fails with AuthorizationPolicyNotMet`() =
+            runTest {
+                val policyViolationError = PolicyViolation("Policy violated")
+                val openId4Vp =
+                    openId4Vp(
+                        walletConfig.withWrprcPolicy {
+                            _,
+                            _,
+                            _,
+                            ->
+                            RegistrationCertificatePolicy.Authorization.NotGranted(policyViolationError)
+                        },
+                    )
+                val verifierInfo =
+                    VerifierInfo(
+                        listOf(
+                            VerifierInfo.Attestation(
+                                VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                                VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                            ),
+                        ),
+                    )
+                val clientId = "x509_hash:0Wuix-gyx7KGtmfxusspetyYsnjThtGOpI15s5QVPZQ"
+                val signedJwt =
+                    unvalidatedRequestOverDCApi(
+                        clientId = clientId,
+                        dcqlQuery = dcqlQuery,
+                        expectedOrigins = listOf(origin),
+                        clientMetadata = unvalidatedClientMetaData,
+                        verifierInfo = verifierInfo,
+                    ).signWithKeystore()
+
+                val resolution =
+                    openId4Vp.resolveRequestObject(
+                        OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED,
+                        origin,
+                        buildJsonObject {
+                            put("request", signedJwt)
+                        },
+                    )
+
+                assertIs<Resolution.Invalid>(resolution)
+                assertIs<AuthorizationPolicyValidationError.AuthorizationPolicyNotMet>(resolution.error)
+            }
     }
 }
 
-internal fun VerifierInfo?.toVerifierInfoTO(): VerifierInfoTO? = this?.let { verifierInfo ->
-    val value = Json.encodeToString(verifierInfo.attestations)
-    return VerifierInfoTO(Json.decodeFromString(value))
-}
+internal fun VerifierInfo?.toVerifierInfoTO(): VerifierInfoTO? =
+    this?.let { verifierInfo ->
+        val value = Json.encodeToString(verifierInfo.attestations)
+        return VerifierInfoTO(Json.decodeFromString(value))
+    }
 
 private fun OpenId4VPConfig.withWrprcPolicy(policy: RegistrationCertificatePolicy): OpenId4VPConfig =
     copy(registrationCertificatePolicy = policy)

@@ -33,9 +33,7 @@ import java.security.KeyStore
 import java.time.Clock
 import java.util.*
 
-internal fun UnvalidatedRequestObject.multiSigned(
-    signers: List<SchemeSigner>,
-): ReceivedRequest.MultiSigned {
+internal fun UnvalidatedRequestObject.multiSigned(signers: List<SchemeSigner>): ReceivedRequest.MultiSigned {
     require(signers.isNotEmpty()) { "At least one signer is required" }
 
     // Convert the request object to JWT claims
@@ -47,28 +45,31 @@ internal fun UnvalidatedRequestObject.multiSigned(
     val payload = Base64UrlNoPadding.invoke(payloadBase64).getOrThrow()
 
     // Create signatures for each signer
-    val signatures = signers.map { signer ->
-        // Create a SignedJWT for this signer
-        val header = with(JWSHeader.Builder(signer.alg)) {
-            type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
-            signer.headerCustomization(this)
-            build()
+    val signatures =
+        signers.map { signer ->
+            // Create a SignedJWT for this signer
+            val header =
+                with(JWSHeader.Builder(signer.alg)) {
+                    type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
+                    signer.headerCustomization(this)
+                    build()
+                }
+
+            // Sign the JWT
+            val jwt =
+                SignedJWT(header, claimsSet).apply {
+                    val jwsSigner = DefaultJWSSignerFactory().createJWSSigner(signer.key, signer.alg)
+                    sign(jwsSigner)
+                }
+
+            // Extract the parts from the signed JWT
+            val parts = jwt.serialize().split(".")
+            val protectedHeader = Base64UrlNoPadding(parts[0]).getOrThrow()
+            val signature = Base64UrlNoPadding(parts[2]).getOrThrow()
+
+            // Create a Signature object
+            Signature(protected = protectedHeader, signature = signature)
         }
-
-        // Sign the JWT
-        val jwt = SignedJWT(header, claimsSet).apply {
-            val jwsSigner = DefaultJWSSignerFactory().createJWSSigner(signer.key, signer.alg)
-            sign(jwsSigner)
-        }
-
-        // Extract the parts from the signed JWT
-        val parts = jwt.serialize().split(".")
-        val protectedHeader = Base64UrlNoPadding(parts[0]).getOrThrow()
-        val signature = Base64UrlNoPadding(parts[2]).getOrThrow()
-
-        // Create a Signature object
-        Signature(protected = protectedHeader, signature = signature)
-    }
 
     // Create a JwsJson.General object with the payload and signatures
     val jwsJson = JwsJson.General(payload = payload, signatures = signatures)
@@ -105,9 +106,11 @@ internal fun UnvalidatedRequestObject.signWithKeystore(
     )
 
     val chain = keyStore.getCertificateChain("verifierexample")
-    val base64EncodedChain = chain.map {
-        com.nimbusds.jose.util.Base64.encode(it.encoded)
-    }
+    val base64EncodedChain =
+        chain.map {
+            com.nimbusds.jose.util.Base64
+                .encode(it.encoded)
+        }
     val headerBuilder = JWSHeader.Builder(JWSAlgorithm.RS256)
     headerBuilder.x509CertChain(base64EncodedChain.toMutableList())
     typ.let {
@@ -117,12 +120,15 @@ internal fun UnvalidatedRequestObject.signWithKeystore(
     val signedJWT = SignedJWT(headerBuilder.build(), toJwtClaimSet())
 
     val jwkSet = JWKSet.load(keyStore) { _ -> "12345".toCharArray() }
-    val signingKey = jwkSet.filter(
-        JWKMatcher.Builder()
-            .keyType(KeyType.RSA)
-            .keyID("verifierexample")
-            .build(),
-    ).keys[0]
+    val signingKey =
+        jwkSet
+            .filter(
+                JWKMatcher
+                    .Builder()
+                    .keyType(KeyType.RSA)
+                    .keyID("verifierexample")
+                    .build(),
+            ).keys[0]
 
     val signer = DefaultJWSSignerFactory().createJWSSigner(signingKey)
     signedJWT.sign(signer)
@@ -134,25 +140,28 @@ internal fun UnvalidatedRequestObject.signedWithAttestation(
     alg: JWSAlgorithm,
     key: JWK,
     attestation: SignedJWT,
-): ReceivedRequest.Signed = signed(alg, key) {
-    this.customParam("jwt", attestation.serialize())
-}
+): ReceivedRequest.Signed =
+    signed(alg, key) {
+        this.customParam("jwt", attestation.serialize())
+    }
 
 internal fun UnvalidatedRequestObject.signed(
     alg: JWSAlgorithm,
     key: JWK,
     headerCustomization: (JWSHeader.Builder).() -> Unit = {},
 ): ReceivedRequest.Signed {
-    val header = with(JWSHeader.Builder(alg)) {
-        type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
-        headerCustomization()
-        build()
-    }
+    val header =
+        with(JWSHeader.Builder(alg)) {
+            type(JOSEObjectType(OpenId4VPSpec.AUTHORIZATION_REQUEST_OBJECT_TYPE))
+            headerCustomization()
+            build()
+        }
     val claimsSet = toJWTClaimSet()
-    val jwt = SignedJWT(header, claimsSet).apply {
-        val signer = DefaultJWSSignerFactory().createJWSSigner(key, alg)
-        sign(signer)
-    }
+    val jwt =
+        SignedJWT(header, claimsSet).apply {
+            val signer = DefaultJWSSignerFactory().createJWSSigner(key, alg)
+            sign(signer)
+        }
     return ReceivedRequest.Signed(jwt)
 }
 
@@ -163,17 +172,18 @@ internal fun unvalidatedRequestOverRedirects(
     clientMetadata: UnvalidatedClientMetaData,
     verifierInfo: VerifierInfo? = null,
 ): UnvalidatedRequestObject {
-    val request = UnvalidatedRequestObject(
-        clientId = clientId,
-        responseMode = "direct_post",
-        responseType = "vp_token",
-        responseUri = responseUri,
-        nonce = "nonce",
-        state = "638JwH0b2jrhGlAZQVa50KysVazkI-YpiFcLj2DLMalJpZK6XC22vAsPqXkpwAwXzfYpK-WLc3GhHYK8lbT6rw",
-        dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
-        clientMetaData = Json.decodeFromString<JsonObject>(Json.encodeToString(clientMetadata)),
-        verifierInfo = verifierInfo.toVerifierInfoTO(),
-    )
+    val request =
+        UnvalidatedRequestObject(
+            clientId = clientId,
+            responseMode = "direct_post",
+            responseType = "vp_token",
+            responseUri = responseUri,
+            nonce = "nonce",
+            state = "638JwH0b2jrhGlAZQVa50KysVazkI-YpiFcLj2DLMalJpZK6XC22vAsPqXkpwAwXzfYpK-WLc3GhHYK8lbT6rw",
+            dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
+            clientMetaData = Json.decodeFromString<JsonObject>(Json.encodeToString(clientMetadata)),
+            verifierInfo = verifierInfo.toVerifierInfoTO(),
+        )
     return request
 }
 
@@ -185,16 +195,17 @@ internal fun unvalidatedRequestOverDCApi(
     clientMetadata: UnvalidatedClientMetaData? = null,
     verifierInfo: VerifierInfo? = null,
 ): UnvalidatedRequestObject {
-    val request = UnvalidatedRequestObject(
-        clientId = clientId,
-        responseMode = responseMode,
-        responseType = "vp_token",
-        nonce = "nonce",
-        dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
-        clientMetaData = clientMetadata?.let { Json.decodeFromString<JsonObject>(Json.encodeToString(clientMetadata)) },
-        expectedOrigins = expectedOrigins,
-        verifierInfo = verifierInfo.toVerifierInfoTO(),
-    )
+    val request =
+        UnvalidatedRequestObject(
+            clientId = clientId,
+            responseMode = responseMode,
+            responseType = "vp_token",
+            nonce = "nonce",
+            dcqlQuery = jsonSupport.decodeFromString<JsonObject>(dcqlQuery),
+            clientMetaData = clientMetadata?.let { Json.decodeFromString<JsonObject>(Json.encodeToString(clientMetadata)) },
+            expectedOrigins = expectedOrigins,
+            verifierInfo = verifierInfo.toVerifierInfoTO(),
+        )
     return request
 }
 
@@ -214,13 +225,17 @@ internal fun didSigner(didAlgAndKey: Pair<JWSAlgorithm, ECKey>): SchemeSigner {
     }
 }
 
-internal fun verifierAttestationSigner(didAlgAndKey: Pair<JWSAlgorithm, ECKey>, clock: Clock): SchemeSigner {
+internal fun verifierAttestationSigner(
+    didAlgAndKey: Pair<JWSAlgorithm, ECKey>,
+    clock: Clock,
+): SchemeSigner {
     val (alg, key) = didAlgAndKey
-    val verifierAttestation = AttestationIssuer.attestation(
-        clock = clock,
-        clientId = "verifier_attestation:http://example.com",
-        clientPubKey = key.toPublicJWK(),
-    )
+    val verifierAttestation =
+        AttestationIssuer.attestation(
+            clock = clock,
+            clientId = "verifier_attestation:http://example.com",
+            clientPubKey = key.toPublicJWK(),
+        )
     return SchemeSigner(alg, key) {
         customParam("client_id", "verifier_attestation:http://www.example.com")
         customParam("jwt", verifierAttestation.serialize())
