@@ -25,13 +25,14 @@ internal fun AuthorizationRequestError.responseWith(
     di: ErrorDispatchDetails,
     encryptionParameters: EncryptionParameters?,
 ): AuthorizationResponse {
-    val payload = AuthorizationResponsePayload.InvalidRequest(
-        error = this,
-        state = di.state,
-        nonce = di.nonce,
-        clientId = di.clientId,
-        encryptionParameters = encryptionParameters,
-    )
+    val payload =
+        AuthorizationResponsePayload.InvalidRequest(
+            error = this,
+            state = di.state,
+            nonce = di.nonce,
+            clientId = di.clientId,
+            encryptionParameters = encryptionParameters,
+        )
     return responseWith(di, payload)
 }
 
@@ -40,28 +41,45 @@ private fun responseWith(
     data: AuthorizationResponsePayload.InvalidRequest,
 ): AuthorizationResponse =
     when (val mode = di.responseMode) {
-        is ResponseMode.DirectPost -> AuthorizationResponse.DirectPost(mode.responseURI, data)
-        is ResponseMode.DirectPostJwt -> AuthorizationResponse.DirectPostJwt(
-            mode.responseURI,
-            data,
-            di.responseEncryptionSpecification,
-        )
+        is ResponseMode.DirectPost -> {
+            AuthorizationResponse.DirectPost(mode.responseURI, data)
+        }
 
-        is ResponseMode.Fragment -> AuthorizationResponse.Fragment(mode.redirectUri, data)
-        is ResponseMode.FragmentJwt -> AuthorizationResponse.FragmentJwt(
-            mode.redirectUri,
-            data,
-            di.responseEncryptionSpecification,
-        )
+        is ResponseMode.DirectPostJwt -> {
+            AuthorizationResponse.DirectPostJwt(
+                mode.responseURI,
+                data,
+                di.responseEncryptionSpecification,
+            )
+        }
 
-        is ResponseMode.Query -> AuthorizationResponse.Query(mode.redirectUri, data)
-        is ResponseMode.QueryJwt -> AuthorizationResponse.QueryJwt(
-            mode.redirectUri,
-            data,
-            di.responseEncryptionSpecification,
-        )
+        is ResponseMode.Fragment -> {
+            AuthorizationResponse.Fragment(mode.redirectUri, data)
+        }
+
+        is ResponseMode.FragmentJwt -> {
+            AuthorizationResponse.FragmentJwt(
+                mode.redirectUri,
+                data,
+                di.responseEncryptionSpecification,
+            )
+        }
+
+        is ResponseMode.Query -> {
+            AuthorizationResponse.Query(mode.redirectUri, data)
+        }
+
+        is ResponseMode.QueryJwt -> {
+            AuthorizationResponse.QueryJwt(
+                mode.redirectUri,
+                data,
+                di.responseEncryptionSpecification,
+            )
+        }
 
         ResponseMode.DCApi,
         ResponseMode.DCApiJwt,
-        -> error("DC API response mode not supported for error dispatching via redirects")
+        -> {
+            error("DC API response mode not supported for error dispatching via redirects")
+        }
     }
