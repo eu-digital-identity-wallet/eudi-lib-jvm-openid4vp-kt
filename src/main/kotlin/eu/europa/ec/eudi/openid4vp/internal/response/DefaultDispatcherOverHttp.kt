@@ -16,6 +16,7 @@
 package eu.europa.ec.eudi.openid4vp.internal.response
 
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -34,8 +35,8 @@ import java.net.URL
  */
 internal class DefaultDispatcherOverHttp(
     private val httpClient: HttpClient,
-) : DispatcherOverHttp, ErrorDispatcher {
-
+) : DispatcherOverHttp,
+    ErrorDispatcher {
     override suspend fun post(
         request: ResolvedRequestObject,
         consensus: Consensus,
@@ -59,9 +60,7 @@ internal class DefaultDispatcherOverHttp(
         return submitForm(httpClient, responseUri, parameters)
     }
 
-    private fun formParameters(
-        response: AuthorizationResponse,
-    ): Pair<URL, Parameters> =
+    private fun formParameters(response: AuthorizationResponse): Pair<URL, Parameters> =
         when (response) {
             is DirectPost -> {
                 val parameters = parametersOf(null, response.data)
@@ -73,7 +72,9 @@ internal class DefaultDispatcherOverHttp(
                 response.responseUri to parameters
             }
 
-            else -> error("Unexpected response $response")
+            else -> {
+                error("Unexpected response $response")
+            }
         }
 
     /**
@@ -104,14 +105,34 @@ internal class DefaultDispatcherOverHttp(
      */
     @Throws(IllegalArgumentException::class)
     private suspend fun HttpResponse.parseRedirectUri(): URI? {
-        val body = runCatchingCancellable { body<JsonObject?>() }.getOrElse { ex ->
-            val exceptionToRaise = when (ex) {
-                is IllegalArgumentException -> ex
-                is NoTransformationFoundException -> IllegalStateException("Http client doesn't seem to support content negotiation", ex)
-                else -> IllegalArgumentException("Failed to parse Verifier response", ex)
+        val body =
+            runCatchingCancellable {
+                val body = bodyAsText()
+                if (body.isNotBlank()) {
+                    jsonSupport.decodeFromString<JsonObject>(body)
+                } else {
+                    null
+                }
+            }.getOrElse { ex ->
+                val exceptionToRaise =
+                    when (ex) {
+                        is IllegalArgumentException -> {
+                            ex
+                        }
+
+                        is NoTransformationFoundException -> {
+                            IllegalStateException(
+                                "Http client doesn't seem to support content negotiation",
+                                ex,
+                            )
+                        }
+
+                        else -> {
+                            IllegalArgumentException("Failed to parse Verifier response", ex)
+                        }
+                    }
+                throw exceptionToRaise
             }
-            throw exceptionToRaise
-        }
         return body?.let { response ->
             response["redirect_uri"]?.let { redirectUri ->
                 require(redirectUri is JsonPrimitive && redirectUri.isString) {
@@ -142,16 +163,15 @@ internal class DefaultDispatcherOverHttp(
         return encodeRedirectURI(response)
     }
 
-    private fun encodeRedirectURI(
-        response: AuthorizationResponse,
-    ): DispatchOutcome.RedirectURI {
-        val uri = when (response) {
-            is Fragment -> response.encodeRedirectURI()
-            is FragmentJwt -> response.encodeRedirectURI()
-            is Query -> response.encodeRedirectURI()
-            is QueryJwt -> response.encodeRedirectURI()
-            else -> error("Unexpected response $response")
-        }
+    private fun encodeRedirectURI(response: AuthorizationResponse): DispatchOutcome.RedirectURI {
+        val uri =
+            when (response) {
+                is Fragment -> response.encodeRedirectURI()
+                is FragmentJwt -> response.encodeRedirectURI()
+                is Query -> response.encodeRedirectURI()
+                is QueryJwt -> response.encodeRedirectURI()
+                else -> error("Unexpected response $response")
+            }
 
         return DispatchOutcome.RedirectURI(uri)
     }
@@ -167,40 +187,47 @@ internal fun parametersOf(
             DirectPostJwtForm.parametersOf(encryptedJwt)
         }
 
-        else -> DirectPostForm.parametersOf(data)
+        else -> {
+            DirectPostForm.parametersOf(data)
+        }
     }
 
 internal fun Query.encodeRedirectURI(): URI =
     URLBuilder(redirectUri.toString())
         .apply {
             parameters.appendAll(parametersOf(null, data))
-        }.build().toURI()
+        }.build()
+        .toURI()
 
 internal fun QueryJwt.encodeRedirectURI(): URI =
     URLBuilder(redirectUri.toString())
         .apply {
             parameters.appendAll(parametersOf(responseEncryptionSpecification, data))
-        }.build().toURI()
+        }.build()
+        .toURI()
 
 internal fun Parameters.toFragment(): String =
     entries().flatMap { (key, values) -> values.map { value -> "$key=$value" } }.joinToString("&")
 
 internal fun Fragment.encodeRedirectURI(): URI =
-    URLBuilder(redirectUri.toString()).apply {
-        fragment = parametersOf(null, data).toFragment()
-    }.build().toURI()
+    URLBuilder(redirectUri.toString())
+        .apply {
+            fragment = parametersOf(null, data).toFragment()
+        }.build()
+        .toURI()
 
 internal fun FragmentJwt.encodeRedirectURI(): URI =
-    URLBuilder(redirectUri.toString()).apply {
-        fragment = parametersOf(responseEncryptionSpecification, data).toFragment()
-    }.build().toURI()
+    URLBuilder(redirectUri.toString())
+        .apply {
+            fragment = parametersOf(responseEncryptionSpecification, data).toFragment()
+        }.build()
+        .toURI()
 
 /**
  * An object responsible for encoding a [AuthorizationResponsePayload] into
  * HTTP form
  */
 internal object DirectPostForm {
-
     fun parametersOf(p: AuthorizationResponsePayload): Parameters =
         p.asDispatchingMap().let { map ->
             parameters {

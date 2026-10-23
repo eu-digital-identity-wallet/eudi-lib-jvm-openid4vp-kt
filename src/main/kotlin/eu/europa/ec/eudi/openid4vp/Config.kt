@@ -67,11 +67,12 @@ fun interface LookupPublicKeyByDIDUrl {
  * The Client identifier prefix supported (or trusted) by the wallet.
  */
 sealed interface SupportedClientIdPrefix {
-
     /**
      * The Client Identifier is known to the Wallet in advance of the Authorization Request.
      */
-    data class Preregistered(val clients: Map<OriginalClientId, PreregisteredClient>) : SupportedClientIdPrefix {
+    data class Preregistered(
+        val clients: Map<OriginalClientId, PreregisteredClient>,
+    ) : SupportedClientIdPrefix {
         constructor(vararg clients: PreregisteredClient) : this(clients.toList().associateBy { it.clientId })
     }
 
@@ -92,7 +93,9 @@ sealed interface SupportedClientIdPrefix {
      * @param lookup a function for getting the public key of the verifier by
      * resolving a given DID URL
      */
-    data class DecentralizedIdentifier(val lookup: LookupPublicKeyByDIDUrl) : SupportedClientIdPrefix
+    data class DecentralizedIdentifier(
+        val lookup: LookupPublicKeyByDIDUrl,
+    ) : SupportedClientIdPrefix
 
     /**
      * Wallet trust verifiers that are able to present a signed Verifier Attestation, which
@@ -129,7 +132,9 @@ sealed interface SupportedClientIdPrefix {
      * @param trust a function that accepts a chain of certificates (contents of `x5c` claim) and
      * indicates whether is trusted or not
      */
-    data class X509SanDns(val trust: X509CertificateTrust) : SupportedClientIdPrefix {
+    data class X509SanDns(
+        val trust: X509CertificateTrust,
+    ) : SupportedClientIdPrefix {
         companion object {
             internal val NoValidation: X509SanDns = X509SanDns { _ -> true }
         }
@@ -144,25 +149,29 @@ sealed interface SupportedClientIdPrefix {
      * @param trust a function that accepts a chain of certificates (contents of `x5c` claim) and
      * indicates whether is trusted or not
      */
-    data class X509Hash(val trust: X509CertificateTrust) : SupportedClientIdPrefix
+    data class X509Hash(
+        val trust: X509CertificateTrust,
+    ) : SupportedClientIdPrefix
 
-    fun prefix(): ClientIdPrefix = when (this) {
-        is Preregistered -> ClientIdPrefix.PreRegistered
-        RedirectUri -> ClientIdPrefix.RedirectUri
-        is DecentralizedIdentifier -> ClientIdPrefix.DecentralizedIdentifier
-        is VerifierAttestation -> ClientIdPrefix.VerifierAttestation
-        is X509SanDns -> ClientIdPrefix.X509SanDns
-        is X509Hash -> ClientIdPrefix.X509Hash
-    }
+    fun prefix(): ClientIdPrefix =
+        when (this) {
+            is Preregistered -> ClientIdPrefix.PreRegistered
+            RedirectUri -> ClientIdPrefix.RedirectUri
+            is DecentralizedIdentifier -> ClientIdPrefix.DecentralizedIdentifier
+            is VerifierAttestation -> ClientIdPrefix.VerifierAttestation
+            is X509SanDns -> ClientIdPrefix.X509SanDns
+            is X509Hash -> ClientIdPrefix.X509Hash
+        }
 
-    fun metadataValue(): String = when (this) {
-        is Preregistered -> OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED
-        RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
-        is DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
-        is VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
-        is X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
-        is X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
-    }
+    fun metadataValue(): String =
+        when (this) {
+            is Preregistered -> OpenId4VPSpec.CLIENT_ID_PREFIX_PRE_REGISTERED
+            RedirectUri -> OpenId4VPSpec.CLIENT_ID_PREFIX_REDIRECT_URI
+            is DecentralizedIdentifier -> OpenId4VPSpec.CLIENT_ID_PREFIX_DECENTRALIZED_IDENTIFIER
+            is VerifierAttestation -> OpenId4VPSpec.CLIENT_ID_PREFIX_VERIFIER_ATTESTATION
+            is X509SanDns -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_SAN_DNS
+            is X509Hash -> OpenId4VPSpec.CLIENT_ID_PREFIX_X509_HASH
+        }
 }
 
 /**
@@ -214,7 +223,6 @@ data class VPConfiguration(
  * OpenId4VP recommends supporting [encrypting][Supported] the authorization response
  */
 sealed interface ResponseEncryptionConfiguration {
-
     /**
      * The wallet supports encrypting authorization responses
      *
@@ -240,10 +248,11 @@ sealed interface ResponseEncryptionConfiguration {
 
         companion object {
             @Suppress("DEPRECATION")
-            private val REJECTED_ALGORITHMS: Set<JWEAlgorithm> = setOf(
-                JWEAlgorithm.RSA1_5,
-                JWEAlgorithm.RSA_OAEP,
-            )
+            private val REJECTED_ALGORITHMS: Set<JWEAlgorithm> =
+                setOf(
+                    JWEAlgorithm.RSA1_5,
+                    JWEAlgorithm.RSA_OAEP,
+                )
         }
     }
 
@@ -257,7 +266,9 @@ sealed interface NonceOption {
     data object DoNotUse : NonceOption
 
     @JvmInline
-    value class Use(val byteLength: Int = MINIMUM_NONCE_LENGTH) : NonceOption {
+    value class Use(
+        val byteLength: Int = MINIMUM_NONCE_LENGTH,
+    ) : NonceOption {
         init {
             require(byteLength >= MINIMUM_NONCE_LENGTH) { "Byte length should be at least $MINIMUM_NONCE_LENGTH" }
         }
@@ -272,7 +283,6 @@ sealed interface NonceOption {
  * Wallet articulated encryption requirements.
  */
 sealed interface EncryptionRequirement : java.io.Serializable {
-
     /**
      * Encryption is not required.
      */
@@ -319,7 +329,6 @@ sealed interface EncryptionRequirement : java.io.Serializable {
  * Which of the `request_uri_method` are supported by the wallet
  */
 sealed interface SupportedRequestUriMethods {
-
     /**
      * Indicates support to `request_uri_method` `get`
      */
@@ -355,18 +364,22 @@ sealed interface SupportedRequestUriMethods {
     /**
      * Both methods are supported
      */
-    data class Both(val post: Post) : SupportedRequestUriMethods
+    data class Both(
+        val post: Post,
+    ) : SupportedRequestUriMethods
 
-    fun isGetSupported(): Boolean = when (this) {
-        is Both, Get -> true
-        is Post -> false
-    }
+    fun isGetSupported(): Boolean =
+        when (this) {
+            is Both, Get -> true
+            is Post -> false
+        }
 
-    fun isPostSupported(): Post? = when (this) {
-        is Both -> post
-        Get -> null
-        is Post -> this
-    }
+    fun isPostSupported(): Post? =
+        when (this) {
+            is Both -> post
+            Get -> null
+            is Post -> this
+        }
 
     companion object {
         /**
@@ -383,8 +396,9 @@ sealed interface SupportedRequestUriMethods {
  * based on different scenarios or restrictions.
  */
 sealed interface MultiSignedRequestsPolicy {
-
-    data class Expect(val clientPrefix: ClientIdPrefix) : MultiSignedRequestsPolicy
+    data class Expect(
+        val clientPrefix: ClientIdPrefix,
+    ) : MultiSignedRequestsPolicy
 
     data object NotSupported : MultiSignedRequestsPolicy
 }
@@ -421,11 +435,12 @@ data class SignedRequestConfiguration(
          *
          * @see SupportedRequestUriMethods.Default
          */
-        val Default = SignedRequestConfiguration(
-            supportedAlgorithms = listOf(JWSAlgorithm.ES256, JWSAlgorithm.ES384, JWSAlgorithm.ES512),
-            supportedRequestUriMethods = SupportedRequestUriMethods.Default,
-            multiSignedRequestsPolicy = MultiSignedRequestsPolicy.NotSupported,
-        )
+        val Default =
+            SignedRequestConfiguration(
+                supportedAlgorithms = listOf(JWSAlgorithm.ES256, JWSAlgorithm.ES384, JWSAlgorithm.ES512),
+                supportedRequestUriMethods = SupportedRequestUriMethods.Default,
+                multiSignedRequestsPolicy = MultiSignedRequestsPolicy.NotSupported,
+            )
     }
 }
 
@@ -433,7 +448,6 @@ data class SignedRequestConfiguration(
  * Wallets policy regarding error dispatching.
  */
 enum class ErrorDispatchPolicy : java.io.Serializable {
-
     /**
      * Allow dispatching of errors to all clients, regardless of authentication status.
      */
@@ -453,7 +467,6 @@ enum class ErrorDispatchPolicy : java.io.Serializable {
  * authorized based on the policy rules and return an appropriate `Authorization` result.
  */
 fun interface RegistrationCertificatePolicy {
-
     suspend operator fun invoke(
         accessCertificate: X509Certificate,
         registrationCertificate: String,
@@ -472,8 +485,13 @@ fun interface RegistrationCertificatePolicy {
      *   single `PolicyViolation` as the reason for denial.
      */
     sealed interface Authorization {
-        data class Granted(val warnings: List<PolicyViolation> = emptyList()) : Authorization
-        data class NotGranted(val error: PolicyViolation) : Authorization
+        data class Granted(
+            val warnings: List<PolicyViolation> = emptyList(),
+        ) : Authorization
+
+        data class NotGranted(
+            val error: PolicyViolation,
+        ) : Authorization
     }
 
     /**
@@ -490,7 +508,9 @@ fun interface RegistrationCertificatePolicy {
      * @throws IllegalArgumentException if the violation description is empty.
      */
     @JvmInline
-    value class PolicyViolation(val violation: String) {
+    value class PolicyViolation(
+        val violation: String,
+    ) {
         init {
             require(violation.isNotEmpty()) { "violation must not be empty" }
         }
@@ -527,7 +547,6 @@ data class OpenId4VPConfig(
     val errorDispatchPolicy: ErrorDispatchPolicy = ErrorDispatchPolicy.OnlyAuthenticatedClients,
     val registrationCertificatePolicy: RegistrationCertificatePolicy? = null,
 ) {
-
     init {
         require(supportedClientIdPrefixes.isNotEmpty()) { "At least a supported client id prefix must be provided" }
 

@@ -32,30 +32,27 @@ import kotlinx.serialization.json.jsonPrimitive
  * which can either grant or deny authorization depending on whether the client complies with the policy.
  */
 internal fun interface RegistrationCertificatePolicyEvaluator {
-
     suspend fun evaluate(request: ResolvedRequestObject): RegistrationCertificatePolicy.Authorization
 
     companion object {
+        operator fun invoke(policy: RegistrationCertificatePolicy): RegistrationCertificatePolicyEvaluator =
+            RegistrationCertificatePolicyEvaluator { request ->
 
-        operator fun invoke(
-            policy: RegistrationCertificatePolicy,
-        ): RegistrationCertificatePolicyEvaluator = RegistrationCertificatePolicyEvaluator { request ->
+                val authenticatedClient = request.client
+                if (authenticatedClient !is Client.X509Hash) {
+                    RegistrationCertificatePolicy.Authorization.Granted()
+                } else {
+                    val verifierInfo = request.verifierInfo
+                    ensureNotNull(verifierInfo) { MissingRequiredRegistrationCertificate.asException() }
+                    val wrprc = verifierInfo.registrationCertificate()
 
-            val authenticatedClient = request.client
-            if (authenticatedClient !is Client.X509Hash) {
-                RegistrationCertificatePolicy.Authorization.Granted()
-            } else {
-                val verifierInfo = request.verifierInfo
-                ensureNotNull(verifierInfo) { MissingRequiredRegistrationCertificate.asException() }
-                val wrprc = verifierInfo.registrationCertificate()
-
-                policy.invoke(
-                    authenticatedClient.cert,
-                    wrprc,
-                    request.query,
-                )
+                    policy.invoke(
+                        authenticatedClient.cert,
+                        wrprc,
+                        request.query,
+                    )
+                }
             }
-        }
     }
 }
 

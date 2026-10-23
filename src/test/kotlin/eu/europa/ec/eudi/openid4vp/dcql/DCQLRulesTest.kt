@@ -19,14 +19,14 @@ import kotlin.test.Test
 import kotlin.test.fail
 
 class DCQLRulesTest {
-
     @Test
     fun credentialQueryIdMustBeNonEemptyStringAlphanumericUnderscoreOrHyphen() {
-        val illegalIds = listOf(
-            "",
-            "@@123a",
-            "^&())_",
-        )
+        val illegalIds =
+            listOf(
+                "",
+                "@@123a",
+                "^&())_",
+            )
         illegalIds.forEach {
             try {
                 QueryId(it)

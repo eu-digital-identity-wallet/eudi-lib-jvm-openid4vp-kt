@@ -50,22 +50,25 @@ object AttestationIssuer {
     ): SignedJWT {
         val (alg, key) = algAndKey
         val signer = DefaultJWSSignerFactory().createJWSSigner(key, alg)
-        val header = JWSHeader.Builder(alg)
-            .type(JOSEObjectType("verifier-attestation+jwt"))
-            .build()
+        val header =
+            JWSHeader
+                .Builder(alg)
+                .type(JOSEObjectType("verifier-attestation+jwt"))
+                .build()
         val now = clock.instant()
         require(!clientPubKey.isPrivate) { "clientPubKey should be public" }
         val cnf = mapOf("jwk" to clientPubKey.toPublicJWK().toJSONObject())
-        val claimSet = with(JWTClaimsSet.Builder()) {
-            issuer(ID)
-            subject(clientId)
-            issueTime(now.toDate())
-            expirationTime(expiration(now).toDate())
-            claim("cnf", cnf)
-            redirectUris?.let { uris -> claim("redirect_uris", uris.map { it.toString() }) }
-            responseUris?.let { uris -> claim("response_urls", uris.map { it.toString() }) }
-            build()
-        }
+        val claimSet =
+            with(JWTClaimsSet.Builder()) {
+                issuer(ID)
+                subject(clientId)
+                issueTime(now.toDate())
+                expirationTime(expiration(now).toDate())
+                claim("cnf", cnf)
+                redirectUris?.let { uris -> claim("redirect_uris", uris.map { it.toString() }) }
+                responseUris?.let { uris -> claim("response_urls", uris.map { it.toString() }) }
+                build()
+            }
 
         return SignedJWT(header, claimSet).apply { sign(signer) }
     }
