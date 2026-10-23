@@ -67,21 +67,23 @@ private fun jweHeader(
                 val apv = data.nonce?.let { Base64URL.encode(it) }
                 apv to encryptionParameters.apu
             }
-            else -> null to null
+
+            else -> {
+                null to null
+            }
         }
 
-    return JWEHeader.Builder(jweAlgorithm, encryptionMethod)
+    return JWEHeader
+        .Builder(jweAlgorithm, encryptionMethod)
         .apply {
             builderAction()
             apv?.let(::agreementPartyVInfo)
             apu?.let(::agreementPartyUInfo)
             keyID(recipientKey.keyID)
-        }
-        .build()
+        }.build()
 }
 
 private object JwtPayloadFactory {
-
     private const val VP_TOKEN_CLAIM = "vp_token"
     private const val STATE_CLAIM = "state"
     private const val ERROR_CLAIM = "error"
@@ -119,7 +121,6 @@ private object JwtPayloadFactory {
 }
 
 internal object EncrypterFactory {
-
     fun createEncrypter(
         algorithm: JWEAlgorithm,
         recipientKey: JWK,
@@ -139,17 +140,19 @@ internal object EncrypterFactory {
             }
         }
 
-    fun canBeUsed(algorithm: JWEAlgorithm, candidateRecipientKey: JWK): Boolean {
-        return familyOf(algorithm)?.let { family ->
+    fun canBeUsed(
+        algorithm: JWEAlgorithm,
+        candidateRecipientKey: JWK,
+    ): Boolean =
+        familyOf(algorithm)?.let { family ->
             when {
                 family == Family.ECDH_ES && candidateRecipientKey is ECKey -> true
                 family == Family.RSA && candidateRecipientKey is RSAKey -> true
                 else -> false
             }
         } == true
-    }
 
     private val SupportedFamilies = listOf(Family.ECDH_ES, Family.RSA)
-    private fun familyOf(algorithm: JWEAlgorithm): Family? =
-        SupportedFamilies.firstOrNull { family -> family.contains(algorithm) }
+
+    private fun familyOf(algorithm: JWEAlgorithm): Family? = SupportedFamilies.firstOrNull { family -> family.contains(algorithm) }
 }

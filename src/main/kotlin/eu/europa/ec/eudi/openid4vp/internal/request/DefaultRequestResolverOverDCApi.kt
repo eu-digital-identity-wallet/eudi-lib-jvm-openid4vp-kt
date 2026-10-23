@@ -46,8 +46,11 @@ internal class DefaultRequestResolverOverDCApi private constructor(
     private val requestAuthenticator: RequestAuthenticator,
     private val requestObjectValidator: RequestObjectValidator,
 ) : AuthorizationRequestOverDCApiResolver {
-
-    override suspend fun resolveRequestObject(protocol: String, origin: String, requestData: JsonObject): Resolution =
+    override suspend fun resolveRequestObject(
+        protocol: String,
+        origin: String,
+        requestData: JsonObject,
+    ): Resolution =
         try {
             val receivedRequest = makeReceivedRequest(requestData)
             val exchangeProtocol = DCApiExchangeProtocol.from(protocol)
@@ -75,44 +78,49 @@ internal class DefaultRequestResolverOverDCApi private constructor(
                 Signed(jwsJson)
             }
 
-            else -> Unsigned(jsonSupport.decodeFromJsonElement(requestData))
+            else -> {
+                Unsigned(jsonSupport.decodeFromJsonElement(requestData))
+            }
         }
     }
 
     companion object {
-        operator fun invoke(
-            openId4VPConfig: OpenId4VPConfig,
-        ): DefaultRequestResolverOverDCApi = DefaultRequestResolverOverDCApi(
-            requestAuthenticator = RequestAuthenticator(openId4VPConfig),
-            requestObjectValidator = RequestObjectValidator(openId4VPConfig),
-        )
+        operator fun invoke(openId4VPConfig: OpenId4VPConfig): DefaultRequestResolverOverDCApi =
+            DefaultRequestResolverOverDCApi(
+                requestAuthenticator = RequestAuthenticator(openId4VPConfig),
+                requestObjectValidator = RequestObjectValidator(openId4VPConfig),
+            )
     }
 }
 
-private infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedRequest) = when (this) {
-    DCApiExchangeProtocol.UNSIGNED ->
-        ensure(receivedRequest is Unsigned) {
-            asMissMatchException(
-                "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED} but request is not Unsigned.",
-            )
+private infix fun DCApiExchangeProtocol.assertMatches(receivedRequest: ReceivedRequest) =
+    when (this) {
+        DCApiExchangeProtocol.UNSIGNED -> {
+            ensure(receivedRequest is Unsigned) {
+                asMissMatchException(
+                    "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_UNSIGNED} but request is not Unsigned.",
+                )
+            }
         }
 
-    DCApiExchangeProtocol.SIGNED ->
-        ensure(receivedRequest is Signed) {
-            asMissMatchException(
-                "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED} but request's format is not JWS " +
-                    "compact serialization.",
-            )
+        DCApiExchangeProtocol.SIGNED -> {
+            ensure(receivedRequest is Signed) {
+                asMissMatchException(
+                    "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_SIGNED} but request's format is not JWS " +
+                        "compact serialization.",
+                )
+            }
         }
 
-    DCApiExchangeProtocol.MULTISIGNED ->
-        ensure(receivedRequest is MultiSigned) {
-            asMissMatchException(
-                "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_MULTISIGNED} but request's format is not " +
-                    "JWS general serialization.",
-            )
+        DCApiExchangeProtocol.MULTISIGNED -> {
+            ensure(receivedRequest is MultiSigned) {
+                asMissMatchException(
+                    "Exchange protocol is ${OpenId4VPSpec.DC_API_EXCHANGE_PROTOCOL_MULTISIGNED} but request's format is not " +
+                        "JWS general serialization.",
+                )
+            }
         }
-}
+    }
 
 private fun asMissMatchException(reason: String): Throwable =
     ResolutionError.DcApiExchangeProtocolNotMatchesReceivedRequest(reason).asException()

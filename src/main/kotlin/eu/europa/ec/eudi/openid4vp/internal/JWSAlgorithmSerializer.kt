@@ -24,10 +24,12 @@ import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 
 internal object JWSAlgorithmSerializer : KSerializer<JWSAlgorithm> {
-
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("com.nimbusds.jose.JWSAlgorithm", PrimitiveKind.STRING)
 
-    override fun serialize(encoder: Encoder, value: JWSAlgorithm) {
+    override fun serialize(
+        encoder: Encoder,
+        value: JWSAlgorithm,
+    ) {
         encoder.encodeString(value.name)
     }
 

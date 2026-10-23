@@ -31,7 +31,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class ConfigTests {
-
     @Test
     fun `SupportedVpFormats requires at least one SupportedVpFormat`() {
         assertDoesNotThrow {
@@ -63,38 +62,42 @@ class ConfigTests {
         }
     }
 
-    private val signingKey = RSAKeyGenerator(2048)
-        .keyUse(KeyUse.SIGNATURE) // indicate the intended use of the key (optional)
-        .keyID(UUID.randomUUID().toString()) // give the key a unique ID (optional)
-        .issueTime(Date(System.currentTimeMillis())) // issued-at timestamp (optional)
-        .generate()
+    private val signingKey =
+        RSAKeyGenerator(2048)
+            .keyUse(KeyUse.SIGNATURE) // indicate the intended use of the key (optional)
+            .keyID(UUID.randomUUID().toString()) // give the key a unique ID (optional)
+            .issueTime(Date(System.currentTimeMillis())) // issued-at timestamp (optional)
+            .generate()
 
     @Test
     fun `if jar config for multi-signed requests is MultiSignedRequestsPolicy_ExpectPrefix it must include a supported scheme`() {
-        val preRegSupportedPrefix = SupportedClientIdPrefix.Preregistered(
-            PreregisteredClient(
-                "Verifier",
-                "Verifier",
-                JWSAlgorithm.RS256 to JWKSet(signingKey.toPublicJWK()),
-            ),
-        )
+        val preRegSupportedPrefix =
+            SupportedClientIdPrefix.Preregistered(
+                PreregisteredClient(
+                    "Verifier",
+                    "Verifier",
+                    JWSAlgorithm.RS256 to JWKSet(signingKey.toPublicJWK()),
+                ),
+            )
         val x509SanDnsSupportedScheme = SupportedClientIdPrefix.X509SanDns({ _ -> true })
 
         assertFailsWith<IllegalArgumentException> {
             OpenId4VPConfig(
-                vpFormatsSupported = VpFormatsSupported(
-                    VpFormatsSupported.SdJwtVc.HAIP,
-                    VpFormatsSupported.MsoMdoc(
-                        issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
-                        deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                vpFormatsSupported =
+                    VpFormatsSupported(
+                        VpFormatsSupported.SdJwtVc.HAIP,
+                        VpFormatsSupported.MsoMdoc(
+                            issuerAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                            deviceAuthAlgorithms = listOf(CoseAlgorithm(-7)),
+                        ),
                     ),
-                ),
                 supportedClientIdPrefixes = listOf(x509SanDnsSupportedScheme, preRegSupportedPrefix),
-                signedRequestConfiguration = SignedRequestConfiguration(
-                    supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
-                    supportedRequestUriMethods = SupportedRequestUriMethods.Default,
-                    multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
-                ),
+                signedRequestConfiguration =
+                    SignedRequestConfiguration(
+                        supportedAlgorithms = JWSAlgorithm.Family.EC.toList() - JWSAlgorithm.ES256K,
+                        supportedRequestUriMethods = SupportedRequestUriMethods.Default,
+                        multiSignedRequestsPolicy = MultiSignedRequestsPolicy.Expect(ClientIdPrefix.DecentralizedIdentifier),
+                    ),
             )
         }
     }
@@ -223,12 +226,13 @@ class ConfigTests {
 
     @Test
     fun `fails when using request uri method post, wallet metadata, and no issuer`() {
-        val exception = assertFailsWith<IllegalArgumentException> {
-            SupportedRequestUriMethods.Post(
-                includeWalletMetadata = true,
-                issuer = null,
-            )
-        }
+        val exception =
+            assertFailsWith<IllegalArgumentException> {
+                SupportedRequestUriMethods.Post(
+                    includeWalletMetadata = true,
+                    issuer = null,
+                )
+            }
         assertEquals(
             "Issuer must be provided when Wallet Metadata is sent",
             exception.message,

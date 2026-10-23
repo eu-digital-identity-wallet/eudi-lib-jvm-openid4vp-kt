@@ -28,15 +28,27 @@ import kotlinx.serialization.json.decodeFromJsonElement
 import java.net.URI
 import java.net.URL
 
-internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConfig) {
-
-    fun validateDCApiRequestObject(origin: String, request: AuthenticatedRequest, isSigned: Boolean): ResolvedRequestObject {
+internal class RequestObjectValidator(
+    private val openId4VPConfig: OpenId4VPConfig,
+) {
+    fun validateDCApiRequestObject(
+        origin: String,
+        request: AuthenticatedRequest,
+        isSigned: Boolean,
+    ): ResolvedRequestObject {
         val (client, requestObject) = request
 
         ensureVpTokenResponseType(requestObject)
         val nonce = requiredNonce(requestObject)
         val scope = requiredScope(requestObject)
-        val nonOpenIdScope = with(Scope) { scope.getOrNull()?.items()?.filter { it != OpenId }?.mergeOrNull() }
+        val nonOpenIdScope =
+            with(Scope) {
+                scope
+                    .getOrNull()
+                    ?.items()
+                    ?.filter { it != OpenId }
+                    ?.mergeOrNull()
+            }
         val query = requiredDcqlQuery(requestObject, nonOpenIdScope, openId4VPConfig.vpFormatsSupported)
         val responseMode = requiredResponseModeOverDCApi(requestObject)
         val clientMetaData = optionalClientMetaData(responseMode, query, requestObject)
@@ -73,7 +85,14 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
 
         ensureVpTokenResponseType(requestObject)
         val scope = requiredScope(requestObject)
-        val nonOpenIdScope = with(Scope) { scope.getOrNull()?.items()?.filter { it != OpenId }?.mergeOrNull() }
+        val nonOpenIdScope =
+            with(Scope) {
+                scope
+                    .getOrNull()
+                    ?.items()
+                    ?.filter { it != OpenId }
+                    ?.mergeOrNull()
+            }
         val state = requestObject.state
         val nonce = requiredNonce(requestObject)
         val responseMode = requiredResponseModeOverHttp(client, requestObject)
@@ -109,12 +128,13 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
         val hasDcqlQuery = !unvalidated.dcqlQuery.isNullOrEmpty()
         val hasScope = scope != null
 
-        fun requiredDcqlQuery(): DCQL = try {
-            checkNotNull(unvalidated.dcqlQuery)
-            jsonSupport.decodeFromJsonElement<DCQL>(unvalidated.dcqlQuery)
-        } catch (t: SerializationException) {
-            throw InvalidDigitalCredentialsQuery(t).asException()
-        }
+        fun requiredDcqlQuery(): DCQL =
+            try {
+                checkNotNull(unvalidated.dcqlQuery)
+                jsonSupport.decodeFromJsonElement<DCQL>(unvalidated.dcqlQuery)
+            } catch (t: SerializationException) {
+                throw InvalidDigitalCredentialsQuery(t).asException()
+            }
 
         fun requiredScope(): DCQL {
             checkNotNull(scope)
@@ -123,14 +143,18 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
 
         val querySourceCount = listOf(hasDcqlQuery, hasScope).count { it }
 
-        val query = when {
-            querySourceCount > 1 -> throw MultipleQuerySources.asException()
-            hasDcqlQuery -> requiredDcqlQuery()
-            hasScope -> requiredScope()
-            else -> throw MissingQuerySource.asException()
-        }
+        val query =
+            when {
+                querySourceCount > 1 -> throw MultipleQuerySources.asException()
+                hasDcqlQuery -> requiredDcqlQuery()
+                hasScope -> requiredScope()
+                else -> throw MissingQuerySource.asException()
+            }
 
-        val queryFormats = query.credentials.value.map { it.format }.toSet()
+        val queryFormats =
+            query.credentials.value
+                .map { it.format }
+                .toSet()
         ensure(walletSupportsVpFormats.containsAll(queryFormats)) {
             UnsupportedQueryFormats.asException()
         }
@@ -204,7 +228,9 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
                     client.clientId
                 }
 
-                else -> ensureNotNull(redirectUri) { MissingRedirectUri.asException() }
+                else -> {
+                    ensureNotNull(redirectUri) { MissingRedirectUri.asException() }
+                }
             }
         }
 
@@ -215,42 +241,50 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
             return uri.asHttpsURL { InvalidResponseUri.asException() }.getOrThrow()
         }
 
-        val responseMode = when (unvalidated.responseMode) {
-            "direct_post" -> requiredResponseUriAndNotProvidedRedirectUri().let { ResponseMode.DirectPost(it) }
-            "direct_post.jwt" -> requiredResponseUriAndNotProvidedRedirectUri().let { ResponseMode.DirectPostJwt(it) }
-            "query" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.Query(it) }
-            "query.jwt" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.QueryJwt(it) }
-            null, "fragment" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.Fragment(it) }
-            "fragment.jwt" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.FragmentJwt(it) }
-            else -> throw UnsupportedResponseMode(unvalidated.responseMode).asException()
-        }
+        val responseMode =
+            when (unvalidated.responseMode) {
+                "direct_post" -> requiredResponseUriAndNotProvidedRedirectUri().let { ResponseMode.DirectPost(it) }
+                "direct_post.jwt" -> requiredResponseUriAndNotProvidedRedirectUri().let { ResponseMode.DirectPostJwt(it) }
+                "query" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.Query(it) }
+                "query.jwt" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.QueryJwt(it) }
+                null, "fragment" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.Fragment(it) }
+                "fragment.jwt" -> requiredRedirectUriAndNotProvidedResponseUri().let { ResponseMode.FragmentJwt(it) }
+                else -> throw UnsupportedResponseMode(unvalidated.responseMode).asException()
+            }
 
         val uri = responseMode.uri()
         when (client) {
-            is AuthenticatedClient.Preregistered -> Unit
-
-            is AuthenticatedClient.RedirectUri -> ensure(client.clientId == uri) {
-                UnsupportedResponseMode("$responseMode doesn't match ${client.clientId}").asException()
+            is AuthenticatedClient.Preregistered -> {
+                Unit
             }
 
-            is AuthenticatedClient.DecentralizedIdentifier -> Unit
+            is AuthenticatedClient.RedirectUri -> {
+                ensure(client.clientId == uri) {
+                    UnsupportedResponseMode("$responseMode doesn't match ${client.clientId}").asException()
+                }
+            }
+
+            is AuthenticatedClient.DecentralizedIdentifier -> {
+                Unit
+            }
 
             is AuthenticatedClient.VerifierAttestation -> {
-                val allowedUris = when (responseMode) {
-                    is ResponseMode.Query,
-                    is ResponseMode.QueryJwt,
-                    is ResponseMode.Fragment,
-                    is ResponseMode.FragmentJwt,
-                    -> client.claims.redirectUris
+                val allowedUris =
+                    when (responseMode) {
+                        is ResponseMode.Query,
+                        is ResponseMode.QueryJwt,
+                        is ResponseMode.Fragment,
+                        is ResponseMode.FragmentJwt,
+                        -> client.claims.redirectUris
 
-                    ResponseMode.DCApi,
-                    ResponseMode.DCApiJwt,
-                    -> error("Unsupported response mode $responseMode")
+                        ResponseMode.DCApi,
+                        ResponseMode.DCApiJwt,
+                        -> error("Unsupported response mode $responseMode")
 
-                    is ResponseMode.DirectPost,
-                    is ResponseMode.DirectPostJwt,
-                    -> client.claims.responseUris
-                }
+                        is ResponseMode.DirectPost,
+                        is ResponseMode.DirectPostJwt,
+                        -> client.claims.responseUris
+                    }
                 if (!allowedUris.isNullOrEmpty()) {
                     ensure(uri.toString() in allowedUris) {
                         UnsupportedResponseMode("$responseMode use a URI that is not included in attested URIs $allowedUris").asException()
@@ -258,25 +292,31 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
                 }
             }
 
-            is AuthenticatedClient.X509SanDns -> ensure(client.clientId == uri.host) {
-                UnsupportedResponseMode("$responseMode host doesn't match ${client.clientId}").asException()
+            is AuthenticatedClient.X509SanDns -> {
+                ensure(client.clientId == uri.host) {
+                    UnsupportedResponseMode("$responseMode host doesn't match ${client.clientId}").asException()
+                }
             }
 
-            is AuthenticatedClient.X509Hash -> Unit
+            is AuthenticatedClient.X509Hash -> {
+                Unit
+            }
 
-            is AuthenticatedClient.Origin ->
+            is AuthenticatedClient.Origin -> {
                 throw IllegalStateException("Origin client is not supported for response_mode: $responseMode")
+            }
         }
 
         return responseMode
     }
 
     private fun requiredResponseModeOverDCApi(unvalidated: UnvalidatedRequestObject): ResponseMode {
-        val responseMode = when (unvalidated.responseMode) {
-            "dc_api" -> ResponseMode.DCApi
-            "dc_api.jwt" -> ResponseMode.DCApiJwt
-            else -> throw UnsupportedResponseMode(unvalidated.responseMode).asException()
-        }
+        val responseMode =
+            when (unvalidated.responseMode) {
+                "dc_api" -> ResponseMode.DCApi
+                "dc_api.jwt" -> ResponseMode.DCApiJwt
+                else -> throw UnsupportedResponseMode(unvalidated.responseMode).asException()
+            }
         return responseMode
     }
 
@@ -288,8 +328,10 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
      */
     private fun requiredScope(unvalidated: UnvalidatedRequestObject): Result<Scope> {
         val scope = unvalidated.scope?.let { Scope.make(it) }
-        return if (scope != null) Result.success(scope)
-        else MissingScope.asFailure()
+        return if (scope != null)
+            Result.success(scope)
+        else
+            MissingScope.asFailure()
     }
 
     /**
@@ -330,14 +372,16 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
         }
 
         return when {
-            hasCMD -> requiredClientMetaData().let {
-                ClientMetaDataValidator.validateClientMetaData(
-                    it,
-                    responseMode,
-                    query,
-                    openId4VPConfig.responseEncryptionConfiguration,
-                    openId4VPConfig.vpFormatsSupported,
-                )
+            hasCMD -> {
+                requiredClientMetaData().let {
+                    ClientMetaDataValidator.validateClientMetaData(
+                        it,
+                        responseMode,
+                        query,
+                        openId4VPConfig.responseEncryptionConfiguration,
+                        openId4VPConfig.vpFormatsSupported,
+                    )
+                }
             }
 
             else -> {
@@ -364,30 +408,56 @@ internal class RequestObjectValidator(private val openId4VPConfig: OpenId4VPConf
 
 private fun AuthenticatedClient.toClient(): Client =
     when (this) {
-        is AuthenticatedClient.Preregistered -> Client.Preregistered(
-            preregisteredClient.clientId,
-            preregisteredClient.legalName,
-        )
+        is AuthenticatedClient.Preregistered -> {
+            Client.Preregistered(
+                preregisteredClient.clientId,
+                preregisteredClient.legalName,
+            )
+        }
 
-        is AuthenticatedClient.RedirectUri -> Client.RedirectUri(clientId)
-        is AuthenticatedClient.DecentralizedIdentifier -> Client.DecentralizedIdentifier(client.uri)
-        is AuthenticatedClient.VerifierAttestation -> Client.VerifierAttestation(clientId)
-        is AuthenticatedClient.X509SanDns -> Client.X509SanDns(clientId, chain[0])
-        is AuthenticatedClient.X509Hash -> Client.X509Hash(clientId, chain[0])
-        is AuthenticatedClient.Origin -> Client.Origin(clientId)
+        is AuthenticatedClient.RedirectUri -> {
+            Client.RedirectUri(clientId)
+        }
+
+        is AuthenticatedClient.DecentralizedIdentifier -> {
+            Client.DecentralizedIdentifier(client.uri)
+        }
+
+        is AuthenticatedClient.VerifierAttestation -> {
+            Client.VerifierAttestation(clientId)
+        }
+
+        is AuthenticatedClient.X509SanDns -> {
+            Client.X509SanDns(clientId, chain[0])
+        }
+
+        is AuthenticatedClient.X509Hash -> {
+            Client.X509Hash(clientId, chain[0])
+        }
+
+        is AuthenticatedClient.Origin -> {
+            Client.Origin(clientId)
+        }
     }
 
-private fun ResponseMode.uri(): URI = when (this) {
-    is ResponseMode.DirectPost -> responseURI.toURI()
-    is ResponseMode.DirectPostJwt -> responseURI.toURI()
-    is ResponseMode.Fragment -> redirectUri
-    is ResponseMode.FragmentJwt -> redirectUri
-    is ResponseMode.Query -> redirectUri
-    is ResponseMode.QueryJwt -> redirectUri
-    ResponseMode.DCApi,
-    ResponseMode.DCApiJwt,
-    -> error("No uri for response mode $this")
-}
+private fun ResponseMode.uri(): URI =
+    when (this) {
+        is ResponseMode.DirectPost -> responseURI.toURI()
+
+        is ResponseMode.DirectPostJwt -> responseURI.toURI()
+
+        is ResponseMode.Fragment -> redirectUri
+
+        is ResponseMode.FragmentJwt -> redirectUri
+
+        is ResponseMode.Query -> redirectUri
+
+        is ResponseMode.QueryJwt -> redirectUri
+
+        ResponseMode.DCApi,
+        ResponseMode.DCApiJwt,
+        -> error("No uri for response mode $this")
+    }
 
 private fun TransactionData.ensureSupported(supportedTransactionDataTypes: List<SupportedTransactionDataType>) =
     when (this) {

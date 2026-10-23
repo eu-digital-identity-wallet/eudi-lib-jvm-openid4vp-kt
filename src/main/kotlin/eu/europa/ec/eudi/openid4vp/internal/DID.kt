@@ -19,8 +19,9 @@ import eu.europa.ec.eudi.openid4vp.runCatchingCancellable
 import java.net.URI
 
 @JvmInline
-internal value class AbsoluteDIDUrl private constructor(val uri: URI) {
-
+internal value class AbsoluteDIDUrl private constructor(
+    val uri: URI,
+) {
     override fun toString(): String = uri.toString()
 
     fun didPart(): DID {
@@ -31,35 +32,41 @@ internal value class AbsoluteDIDUrl private constructor(val uri: URI) {
     }
 
     companion object {
-
-        fun parse(s: String): Result<AbsoluteDIDUrl> = runCatchingCancellable {
-            fun isNotDID() = DID.parse(s).getOrNull() == null
-            if (DID_URL_SYNTAX.matches(s) && isNotDID())
-                AbsoluteDIDUrl(URI.create(s))
-            else error("Not a valid DID URL: $s")
-        }
+        fun parse(s: String): Result<AbsoluteDIDUrl> =
+            runCatchingCancellable {
+                fun isNotDID() = DID.parse(s).getOrNull() == null
+                if (DID_URL_SYNTAX.matches(s) && isNotDID())
+                    AbsoluteDIDUrl(URI.create(s))
+                else
+                    error("Not a valid DID URL: $s")
+            }
     }
 }
 
 @JvmInline
-internal value class DID private constructor(val uri: URI) {
-
+internal value class DID private constructor(
+    val uri: URI,
+) {
     override fun toString(): String = uri.toString()
 
     companion object {
-        fun parse(s: String): Result<DID> = runCatchingCancellable {
-            if (DID_SYNTAX.matches(s)) DID(URI.create(s))
-            else error("Not a DID")
-        }
+        fun parse(s: String): Result<DID> =
+            runCatchingCancellable {
+                if (DID_SYNTAX.matches(s))
+                    DID(URI.create(s))
+                else
+                    error("Not a DID")
+            }
     }
 }
 
 @Suppress("kotlin:S5843")
-private val DID_URL_SYNTAX = (
-    "^did:[a-z0-9]+:(([A-Z.a-z0-9]|-|_|%[0-9A-Fa-f][0-9A-Fa-f])*:)" +
-        "*([A-Z.a-z0-9]|-|_|%[0-9A-Fa-f][0-9A-Fa-f])+(/(([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)*)" +
-        "*(\\?(((([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)|/|\\?)*))" +
-        "?(#(((([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)|/|\\?)*))?$"
+private val DID_URL_SYNTAX =
+    (
+        "^did:[a-z0-9]+:(([A-Z.a-z0-9]|-|_|%[0-9A-Fa-f][0-9A-Fa-f])*:)" +
+            "*([A-Z.a-z0-9]|-|_|%[0-9A-Fa-f][0-9A-Fa-f])+(/(([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)*)" +
+            "*(\\?(((([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)|/|\\?)*))" +
+            "?(#(((([-A-Z._a-z0-9]|~)|%[0-9A-Fa-f][0-9A-Fa-f]|([!$&'()*+,;=])|:|@)|/|\\?)*))?$"
     ).toRegex()
 
 @Suppress("kotlin:S5843")

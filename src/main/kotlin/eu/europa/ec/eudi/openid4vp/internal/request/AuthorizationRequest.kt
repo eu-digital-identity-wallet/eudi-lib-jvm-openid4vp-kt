@@ -45,21 +45,29 @@ internal data class UnvalidatedRequestObject(
 )
 
 internal sealed interface ReceivedRequest {
-    data class Unsigned(val requestObject: UnvalidatedRequestObject) : ReceivedRequest
-    data class Signed(val jwsJson: JwsJson.Flattened) : ReceivedRequest {
+    data class Unsigned(
+        val requestObject: UnvalidatedRequestObject,
+    ) : ReceivedRequest
+
+    data class Signed(
+        val jwsJson: JwsJson.Flattened,
+    ) : ReceivedRequest {
         companion object {
             operator fun invoke(signedJwt: SignedJWT): Signed = Signed(JwsJson.from(signedJwt).getOrThrow())
         }
     }
 
-    data class MultiSigned(val jwsJson: JwsJson.General) : ReceivedRequest
+    data class MultiSigned(
+        val jwsJson: JwsJson.General,
+    ) : ReceivedRequest
 
     val isSigned: Boolean
-        get() = when (this) {
-            is Signed -> true
-            is MultiSigned -> true
-            else -> false
-        }
+        get() =
+            when (this) {
+                is Signed -> true
+                is MultiSigned -> true
+                else -> false
+            }
 
     companion object
 }
@@ -67,12 +75,12 @@ internal sealed interface ReceivedRequest {
 /**
  * Decomposes a Nimbus [SignedJWT] into [JwsJson].
  */
-private fun JwsJson.Companion.from(signedJwt: SignedJWT): Result<JwsJson.Flattened> = runCatchingCancellable {
-    require(signedJwt.state == JWSObject.State.SIGNED) { "JWS is not signed" }
-    val compactFormString =
-        "${signedJwt.header.toBase64URL()}.${signedJwt.payload.toBase64URL()}.${signedJwt.signature}"
-    JwsJson.fromCompact(compactFormString).getOrThrow()
-}
+private fun JwsJson.Companion.from(signedJwt: SignedJWT): Result<JwsJson.Flattened> =
+    runCatchingCancellable {
+        require(signedJwt.state == JWSObject.State.SIGNED) { "JWS is not signed" }
+        val compactFormString =
+            "${signedJwt.header.toBase64URL()}.${signedJwt.payload.toBase64URL()}.${signedJwt.signature}"
+        JwsJson.fromCompact(compactFormString).getOrThrow()
+    }
 
-internal fun JwsJson.Flattened.toSignedJwt(): SignedJWT =
-    SignedJWT.parse("$protected.$payload.$signature")
+internal fun JwsJson.Flattened.toSignedJwt(): SignedJWT = SignedJWT.parse("$protected.$payload.$signature")
