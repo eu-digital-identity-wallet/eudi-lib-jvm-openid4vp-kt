@@ -16,6 +16,7 @@
 package eu.europa.ec.eudi.openid4vp.internal.response
 
 import eu.europa.ec.eudi.openid4vp.*
+import eu.europa.ec.eudi.openid4vp.internal.jsonSupport
 import eu.europa.ec.eudi.openid4vp.internal.response.AuthorizationResponse.*
 import io.ktor.client.*
 import io.ktor.client.call.*
@@ -105,7 +106,14 @@ internal class DefaultDispatcherOverHttp(
     @Throws(IllegalArgumentException::class)
     private suspend fun HttpResponse.parseRedirectUri(): URI? {
         val body =
-            runCatchingCancellable { body<JsonObject?>() }.getOrElse { ex ->
+            runCatchingCancellable {
+                val body = bodyAsText()
+                if (body.isNotBlank()) {
+                    jsonSupport.decodeFromString<JsonObject>(body)
+                } else {
+                    null
+                }
+            }.getOrElse { ex ->
                 val exceptionToRaise =
                     when (ex) {
                         is IllegalArgumentException -> {
