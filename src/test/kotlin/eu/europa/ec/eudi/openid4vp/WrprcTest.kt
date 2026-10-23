@@ -33,6 +33,7 @@ import java.time.Clock
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
+import kotlin.test.assertNotNull
 
 class WrprcTest {
     val wrprcValid = load("certificates/wrprc.txt").bufferedReader().readText()
