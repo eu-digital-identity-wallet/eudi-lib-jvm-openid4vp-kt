@@ -23,7 +23,6 @@ import java.net.URI
  * a [ResolvedRequestObject]
  */
 sealed interface Consensus : java.io.Serializable {
-
     /**
      * No consensus. Holder decided to reject
      * the request
@@ -38,7 +37,9 @@ sealed interface Consensus : java.io.Serializable {
      *
      * @property verifiablePresentations the Verifiable Presentations to be included in the authorization response
      */
-    data class PositiveConsensus(val verifiablePresentations: VerifiablePresentations) : Consensus
+    data class PositiveConsensus(
+        val verifiablePresentations: VerifiablePresentations,
+    ) : Consensus
 }
 
 /**
@@ -46,12 +47,13 @@ sealed interface Consensus : java.io.Serializable {
  * verifier/RP.
  */
 sealed interface DispatchOutcome : java.io.Serializable {
-
     /**
      * In case verifier requested response to be redirected to a URI,
      * this class contains this URI with the response encoded to it
      */
-    data class RedirectURI(val value: URI) : DispatchOutcome
+    data class RedirectURI(
+        val value: URI,
+    ) : DispatchOutcome
 
     /**
      * In case verifier requested that response should be posted (direct post or direct post jwt)
@@ -61,7 +63,9 @@ sealed interface DispatchOutcome : java.io.Serializable {
         /**
          * When verifier/RP acknowledged the direct post
          */
-        data class Accepted(val redirectURI: URI?) : VerifierResponse
+        data class Accepted(
+            val redirectURI: URI?,
+        ) : VerifierResponse
 
         /**
          * When verifier/RP reject the direct post
@@ -70,7 +74,9 @@ sealed interface DispatchOutcome : java.io.Serializable {
          * redirect the user agent, as defined by OpenID4VP. The Response URI MAY return the
          * redirect_uri parameter in response to error responses.
          */
-        data class Rejected(val redirectURI: URI?) : VerifierResponse
+        data class Rejected(
+            val redirectURI: URI?,
+        ) : VerifierResponse
     }
 }
 
@@ -79,7 +85,6 @@ sealed interface DispatchOutcome : java.io.Serializable {
  * and holder's [consensus][Consensus] and then dispatches it to the verifier over HTTP channel
  */
 interface DispatcherOverHttp {
-
     /**
      * Assembles an appropriate authorization response given a [request][request]
      * and holder's [consensus][Consensus] and then dispatches it to the verifier.
@@ -156,14 +161,11 @@ interface DispatcherOverHttp {
  * assembles an appropriate authorization response.
  */
 interface DCApiResponseBuilder {
-
     suspend fun assembleResponse(
         request: ResolvedRequestObject,
         consensus: Consensus,
         encryptionParameters: EncryptionParameters? = null,
     ): JsonObject
 
-    fun assembleErrorResponse(
-        error: AuthorizationRequestError,
-    ): JsonObject
+    fun assembleErrorResponse(error: AuthorizationRequestError): JsonObject
 }

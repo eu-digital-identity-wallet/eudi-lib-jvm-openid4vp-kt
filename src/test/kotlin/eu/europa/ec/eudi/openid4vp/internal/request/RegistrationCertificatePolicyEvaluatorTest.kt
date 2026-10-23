@@ -26,156 +26,180 @@ import java.security.cert.X509Certificate
 import kotlin.test.*
 
 class RegistrationCertificatePolicyEvaluatorTest {
-
     private val wrprcValid = load("certificates/wrprc.txt")!!.bufferedReader().readText()
 
     private val dummyCert: X509Certificate by lazy {
         val wrprc = SignedJWT.parse(wrprcValid)
-        X509CertUtils.parse(wrprc.header.x509CertChain.first().decode())
-    }
-
-    private val dcql = DCQL(
-        credentials = Credentials(
-            listOf(
-                CredentialQuery.sdJwtVc(
-                    id = QueryId("q1"),
-                    sdJwtVcMeta = DCQLMetaSdJwtVcExtensions(vctValues = listOf("vct1")),
-                ),
-            ),
-        ),
-    )
-
-    @Test
-    fun `evaluate returns Granted when client is not X509Hash`() = runTest {
-        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ ->
-            RegistrationCertificatePolicy.Authorization.NotGranted(RegistrationCertificatePolicy.PolicyViolation("should not be called"))
-        }
-        val request = resolvedRequestObject(client = Client.Origin("client-id"))
-
-        val result = evaluator.evaluate(request)
-        assertTrue(result is RegistrationCertificatePolicy.Authorization.Granted)
-    }
-
-    @Test
-    fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and verifierInfo is null`() = runTest {
-        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = null)
-
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
-        }
-        assertEquals(AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate, exception.error)
-    }
-
-    @Test
-    fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and WRPRC is missing`() = runTest {
-        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.Jwt,
-                    VerifierInfo.Attestation.Data(JsonPrimitive("dummy-jwt")),
-                ),
-            ),
+        X509CertUtils.parse(
+            wrprc.header.x509CertChain
+                .first()
+                .decode(),
         )
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
-
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
-        }
-        assertEquals(AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate, exception.error)
     }
+
+    private val dcql =
+        DCQL(
+            credentials =
+                Credentials(
+                    listOf(
+                        CredentialQuery.sdJwtVc(
+                            id = QueryId("q1"),
+                            sdJwtVcMeta = DCQLMetaSdJwtVcExtensions(vctValues = listOf("vct1")),
+                        ),
+                    ),
+                ),
+        )
 
     @Test
-    fun `evaluate throws MultipleRegistrationCertificates when more than one registration certificates are provided`() = runTest {
-        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                ),
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                ),
-            ),
-        )
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
+    fun `evaluate returns Granted when client is not X509Hash`() =
+        runTest {
+            val evaluator =
+                RegistrationCertificatePolicyEvaluator { _, _, _ ->
+                    RegistrationCertificatePolicy.Authorization.NotGranted(
+                        RegistrationCertificatePolicy.PolicyViolation("should not be called"),
+                    )
+                }
+            val request = resolvedRequestObject(client = Client.Origin("client-id"))
 
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
+            val result = evaluator.evaluate(request)
+            assertTrue(result is RegistrationCertificatePolicy.Authorization.Granted)
         }
-        assertEquals(AuthorizationPolicyValidationError.MultipleRegistrationCertificates, exception.error)
-    }
 
     @Test
-    fun `evaluate throws MalformedRegistrationCertificate when WRPRC is passed as Attestation with credentialIds not null`() = runTest {
-        val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    format = VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    data = VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                    credentialIds = CredentialQueryIds(listOf(QueryId("q1"))),
-                ),
-            ),
-        )
-        val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
+    fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and verifierInfo is null`() =
+        runTest {
+            val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
+            val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = null)
 
-        val exception = assertFailsWith<AuthorizationRequestException> {
-            evaluator.evaluate(request)
+            val exception =
+                assertFailsWith<AuthorizationRequestException> {
+                    evaluator.evaluate(request)
+                }
+            assertEquals(AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate, exception.error)
         }
-        val error = exception.error
-        assertIs<AuthorizationPolicyValidationError.MalformedRegistrationCertificate>(error)
-        assertTrue(error.cause.contains("Provided credentialIds with registrations certificate while not expected"))
-    }
 
     @Test
-    fun `evaluate calls policy and returns its result when everything is valid`() = runTest {
-        var policyCalled = false
-        val evaluator = RegistrationCertificatePolicyEvaluator { accessCert, registrationCert, dcqlParam ->
-            policyCalled = true
-            assertEquals(dummyCert, accessCert)
-            assertNotNull(registrationCert)
-            assertIs<String>(registrationCert)
-            assertEquals(dcql, dcqlParam)
-            RegistrationCertificatePolicy.Authorization.Granted()
+    fun `evaluate throws MissingRequiredRegistrationCertificate when client is X509Hash and WRPRC is missing`() =
+        runTest {
+            val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
+            val verifierInfo =
+                VerifierInfo(
+                    listOf(
+                        VerifierInfo.Attestation(
+                            VerifierInfo.Attestation.Format.Jwt,
+                            VerifierInfo.Attestation.Data(JsonPrimitive("dummy-jwt")),
+                        ),
+                    ),
+                )
+            val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
+
+            val exception =
+                assertFailsWith<AuthorizationRequestException> {
+                    evaluator.evaluate(request)
+                }
+            assertEquals(AuthorizationPolicyValidationError.MissingRequiredRegistrationCertificate, exception.error)
         }
 
-        val verifierInfo = VerifierInfo(
-            listOf(
-                VerifierInfo.Attestation(
-                    VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
-                    VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
-                ),
-            ),
-        )
-        val request = resolvedRequestObject(
-            client = Client.X509Hash("client-id", dummyCert),
-            verifierInfo = verifierInfo,
-        )
-        val result = evaluator.evaluate(request)
+    @Test
+    fun `evaluate throws MultipleRegistrationCertificates when more than one registration certificates are provided`() =
+        runTest {
+            val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
+            val verifierInfo =
+                VerifierInfo(
+                    listOf(
+                        VerifierInfo.Attestation(
+                            VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                            VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                        ),
+                        VerifierInfo.Attestation(
+                            VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                            VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                        ),
+                    ),
+                )
+            val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
 
-        assertTrue(result is RegistrationCertificatePolicy.Authorization.Granted)
-        assertTrue(policyCalled)
-    }
+            val exception =
+                assertFailsWith<AuthorizationRequestException> {
+                    evaluator.evaluate(request)
+                }
+            assertEquals(AuthorizationPolicyValidationError.MultipleRegistrationCertificates, exception.error)
+        }
+
+    @Test
+    fun `evaluate throws MalformedRegistrationCertificate when WRPRC is passed as Attestation with credentialIds not null`() =
+        runTest {
+            val evaluator = RegistrationCertificatePolicyEvaluator { _, _, _ -> RegistrationCertificatePolicy.Authorization.Granted() }
+            val verifierInfo =
+                VerifierInfo(
+                    listOf(
+                        VerifierInfo.Attestation(
+                            format = VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                            data = VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                            credentialIds = CredentialQueryIds(listOf(QueryId("q1"))),
+                        ),
+                    ),
+                )
+            val request = resolvedRequestObject(client = Client.X509Hash("client-id", dummyCert), verifierInfo = verifierInfo)
+
+            val exception =
+                assertFailsWith<AuthorizationRequestException> {
+                    evaluator.evaluate(request)
+                }
+            val error = exception.error
+            assertIs<AuthorizationPolicyValidationError.MalformedRegistrationCertificate>(error)
+            assertTrue(error.cause.contains("Provided credentialIds with registrations certificate while not expected"))
+        }
+
+    @Test
+    fun `evaluate calls policy and returns its result when everything is valid`() =
+        runTest {
+            var policyCalled = false
+            val evaluator =
+                RegistrationCertificatePolicyEvaluator { accessCert, registrationCert, dcqlParam ->
+                    policyCalled = true
+                    assertEquals(dummyCert, accessCert)
+                    assertNotNull(registrationCert)
+                    assertIs<String>(registrationCert)
+                    assertEquals(dcql, dcqlParam)
+                    RegistrationCertificatePolicy.Authorization.Granted()
+                }
+
+            val verifierInfo =
+                VerifierInfo(
+                    listOf(
+                        VerifierInfo.Attestation(
+                            VerifierInfo.Attestation.Format.REGISTRATION_CERTIFICATE,
+                            VerifierInfo.Attestation.Data(JsonPrimitive(wrprcValid)),
+                        ),
+                    ),
+                )
+            val request =
+                resolvedRequestObject(
+                    client = Client.X509Hash("client-id", dummyCert),
+                    verifierInfo = verifierInfo,
+                )
+            val result = evaluator.evaluate(request)
+
+            assertTrue(result is RegistrationCertificatePolicy.Authorization.Granted)
+            assertTrue(policyCalled)
+        }
 
     private fun resolvedRequestObject(
         client: Client,
         verifierInfo: VerifierInfo? = null,
-    ): ResolvedRequestObject = ResolvedRequestObject(
-        client = client,
-        responseMode = ResponseMode.DirectPost(java.net.URL("https://example.com")),
-        state = "state",
-        nonce = "nonce",
-        responseEncryptionSpecification = null,
-        vpFormatsSupported = null,
-        query = dcql,
-        transactionData = null,
-        verifierInfo = verifierInfo,
-    )
+    ): ResolvedRequestObject =
+        ResolvedRequestObject(
+            client = client,
+            responseMode = ResponseMode.DirectPost(java.net.URL("https://example.com")),
+            state = "state",
+            nonce = "nonce",
+            responseEncryptionSpecification = null,
+            vpFormatsSupported = null,
+            query = dcql,
+            transactionData = null,
+            verifierInfo = verifierInfo,
+        )
 
-    private fun load(f: String): InputStream? =
-        RegistrationCertificatePolicyEvaluatorTest::class.java.classLoader.getResourceAsStream(f)
+    private fun load(f: String): InputStream? = RegistrationCertificatePolicyEvaluatorTest::class.java.classLoader.getResourceAsStream(f)
 }

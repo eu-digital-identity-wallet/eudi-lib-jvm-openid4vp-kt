@@ -28,7 +28,6 @@ import kotlinx.serialization.encoding.Encoder
 import kotlinx.serialization.json.*
 
 internal object RFC7515Spec {
-
     const val JWS_JSON_SYNTAX_PAYLOAD = "payload"
     const val JWS_JSON_SYNTAX_SIGNATURE = "signature"
     const val JWS_JSON_SYNTAX_SIGNATURES = "signatures"
@@ -38,18 +37,19 @@ internal object RFC7515Spec {
 
 @JvmInline
 @Serializable(with = Base64UrlNoPaddingSerializer::class)
-internal value class Base64UrlNoPadding private constructor(val value: String) {
-
+internal value class Base64UrlNoPadding private constructor(
+    val value: String,
+) {
     override fun toString(): String = value
 
     companion object {
-
-        operator fun invoke(value: String): Result<Base64UrlNoPadding> = runCatchingCancellable {
-            require(value.isNotBlank()) { "Value must not be empty" }
-            // Try to parse the passed value as base64 url encoded no-padding string
-            base64UrlNoPadding.decode(value)
-            Base64UrlNoPadding(value)
-        }
+        operator fun invoke(value: String): Result<Base64UrlNoPadding> =
+            runCatchingCancellable {
+                require(value.isNotBlank()) { "Value must not be empty" }
+                // Try to parse the passed value as base64 url encoded no-padding string
+                base64UrlNoPadding.decode(value)
+                Base64UrlNoPadding(value)
+            }
     }
 }
 
@@ -68,7 +68,6 @@ internal data class Signature(
 
 @Serializable(with = JwsJsonSerializer::class)
 internal sealed interface JwsJson {
-
     val payload: Base64UrlNoPadding
 
     @Serializable
@@ -96,58 +95,67 @@ internal sealed interface JwsJson {
     }
 
     companion object {
-
         /**
          * Parses an input string representing a JWS in compact form into a [JwsJson.Flattened] object.
          */
-        fun fromCompact(compact: String): Result<Flattened> = runCatchingCancellable {
-            require(compact.isNotBlank()) { "Input must not be empty" }
-            compact.split(".").let { parts ->
-                require(parts.size == 3) { "Input must be a JWS in compact form" }
-                val jwsJsonObject = buildJsonObject {
-                    put(RFC7515Spec.JWS_JSON_SYNTAX_PROTECTED_HEADER, parts[0])
-                    put(RFC7515Spec.JWS_JSON_SYNTAX_PAYLOAD, parts[1])
-                    put(RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURE, parts[2])
+        fun fromCompact(compact: String): Result<Flattened> =
+            runCatchingCancellable {
+                require(compact.isNotBlank()) { "Input must not be empty" }
+                compact.split(".").let { parts ->
+                    require(parts.size == 3) { "Input must be a JWS in compact form" }
+                    val jwsJsonObject =
+                        buildJsonObject {
+                            put(RFC7515Spec.JWS_JSON_SYNTAX_PROTECTED_HEADER, parts[0])
+                            put(RFC7515Spec.JWS_JSON_SYNTAX_PAYLOAD, parts[1])
+                            put(RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURE, parts[2])
+                        }
+                    Json.decodeFromJsonElement<Flattened>(jwsJsonObject)
                 }
-                Json.decodeFromJsonElement<Flattened>(jwsJsonObject)
             }
-        }
 
-        fun JwsJson.flatten(): List<Flattened> = when (this) {
-            is Flattened -> listOf(this)
-            is General -> signatures.map {
-                Flattened(
-                    header = it.header,
-                    protected = it.protected,
-                    payload = payload,
-                    signature = it.signature,
-                )
+        fun JwsJson.flatten(): List<Flattened> =
+            when (this) {
+                is Flattened -> {
+                    listOf(this)
+                }
+
+                is General -> {
+                    signatures.map {
+                        Flattened(
+                            header = it.header,
+                            protected = it.protected,
+                            payload = payload,
+                            signature = it.signature,
+                        )
+                    }
+                }
             }
-        }
     }
 }
 
 internal object JwsJsonSerializer : JsonContentPolymorphicSerializer<JwsJson>(JwsJson::class) {
-
-    override fun selectDeserializer(element: JsonElement): DeserializationStrategy<JwsJson> = when {
-        RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURES in element.jsonObject -> JwsJson.General.serializer()
-        RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURE in element.jsonObject -> JwsJson.Flattened.serializer()
-        else -> throw IllegalArgumentException("Unsupported JWS JSON format")
-    }
+    override fun selectDeserializer(element: JsonElement): DeserializationStrategy<JwsJson> =
+        when {
+            RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURES in element.jsonObject -> JwsJson.General.serializer()
+            RFC7515Spec.JWS_JSON_SYNTAX_SIGNATURE in element.jsonObject -> JwsJson.Flattened.serializer()
+            else -> throw IllegalArgumentException("Unsupported JWS JSON format")
+        }
 }
 
 internal object Base64UrlNoPaddingSerializer : KSerializer<Base64UrlNoPadding> {
-
     override val descriptor: SerialDescriptor = PrimitiveSerialDescriptor("Base64UrlNoPadding", PrimitiveKind.STRING)
 
-    override fun deserialize(decoder: Decoder): Base64UrlNoPadding = try {
-        Base64UrlNoPadding(decoder.decodeString()).getOrThrow()
-    } catch (t: Exception) {
-        throw SerializationException("Unable to decode base64 url-safe", t)
-    }
+    override fun deserialize(decoder: Decoder): Base64UrlNoPadding =
+        try {
+            Base64UrlNoPadding(decoder.decodeString()).getOrThrow()
+        } catch (t: Exception) {
+            throw SerializationException("Unable to decode base64 url-safe", t)
+        }
 
-    override fun serialize(encoder: Encoder, value: Base64UrlNoPadding) =
-        encoder.encodeString(value.toString())
+    override fun serialize(
+        encoder: Encoder,
+        value: Base64UrlNoPadding,
+    ) = encoder.encodeString(value.toString())
 }
 
 internal inline fun <reified T> Base64UrlNoPadding.decodeAs(): T =
