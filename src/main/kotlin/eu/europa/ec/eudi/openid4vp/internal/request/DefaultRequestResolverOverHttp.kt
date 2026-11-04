@@ -342,7 +342,7 @@ private fun dispatchErrorDetailsOrNull(
     client: AuthenticatedClient?,
     openId4VPConfig: OpenId4VPConfig,
 ): ErrorDispatchDetails? {
-    return unvalidatedRequest.responseMode()?.let { responseMode ->
+    return unvalidatedRequest.responseMode(client)?.let { responseMode ->
         if (client != null && !uriMatchesClient(responseMode, client)) return null
         val responseEncryptionSpecification =
             unvalidatedRequest.responseEncryptionSpecification(openId4VPConfig, responseMode)
@@ -377,10 +377,42 @@ private fun UnvalidatedRequestObject.responseEncryptionSpecification(
         }
     }
 
-private fun UnvalidatedRequestObject.responseMode(): ResponseMode? {
-    fun responseUri(): URL? = responseUri?.asHttpsURL()?.getOrNull()
+private fun UnvalidatedRequestObject.responseMode(client: AuthenticatedClient?): ResponseMode? {
+    fun responseUri(): URL? =
+        when {
+            null != responseUri -> {
+                responseUri.asHttpsURL().getOrNull()
+            }
 
-    fun redirectUri(): URI? = redirectUri?.asHttpsURI()?.getOrNull()
+            client is AuthenticatedClient.RedirectUri -> {
+                client.clientId
+                    .toString()
+                    .asHttpsURL()
+                    .getOrNull()
+            }
+
+            else -> {
+                null
+            }
+        }
+
+    fun redirectUri(): URI? =
+        when {
+            null != redirectUri -> {
+                redirectUri.asHttpsURI().getOrNull()
+            }
+
+            client is AuthenticatedClient.RedirectUri -> {
+                client.clientId
+                    .toString()
+                    .asHttpsURI()
+                    .getOrNull()
+            }
+
+            else -> {
+                null
+            }
+        }
 
     return when (responseMode) {
         "direct_post" -> {
