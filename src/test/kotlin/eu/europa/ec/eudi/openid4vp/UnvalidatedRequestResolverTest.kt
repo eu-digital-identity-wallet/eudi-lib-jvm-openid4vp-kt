@@ -39,6 +39,7 @@ import org.junit.jupiter.api.BeforeAll
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.TestInstance
+import java.net.URI
 import java.net.URLEncoder
 import java.time.Clock
 import java.util.*
@@ -763,6 +764,102 @@ class UnvalidatedRequestResolverTest {
                 val resolution = resolver().resolveRequestUri(authRequest)
                 val invalid = assertIs<Resolution.Invalid>(resolution)
                 assertNull(invalid.dispatchDetails)
+            }
+
+        @Test
+        fun `resolution success with client id prefix redirect_uri, response mode fragment and no redirect_uri`() =
+            runTest {
+                suspend fun test(state: String? = null) {
+                    val authRequest =
+                        "https://client.example.org/universal-link?" +
+                            "response_type=vp_token" +
+                            "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                            "&nonce=n-0S6_WzA2Mj" +
+                            (state?.let { "&state=$it" } ?: "") +
+                            "&dcql_query=$dcqlQueryURLEncoded" +
+                            "&client_metadata=$clientMetadataJwksInline"
+
+                    val resolution = resolver().resolveRequestUri(authRequest)
+                    val resolvedRequestObject = resolution.assertIsSuccess()
+                    assertEquals(
+                        ResponseMode.Fragment(URI.create("https://client.example.org/cb")),
+                        resolvedRequestObject.responseMode,
+                    )
+                }
+
+                test(genState())
+                test()
+            }
+
+        @Test
+        fun `resolution failure with client id prefix redirect_uri, response mode fragment and redirect_uri mismatch`() =
+            runTest {
+                suspend fun test(state: String? = null) {
+                    val authRequest =
+                        "https://client.example.org/universal-link?" +
+                            "response_type=vp_token" +
+                            "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                            "&redirect_uri=https%3A%2F%2Fclient.example.org%2Fmismatch" +
+                            "&nonce=n-0S6_WzA2Mj" +
+                            (state?.let { "&state=$it" } ?: "") +
+                            "&dcql_query=$dcqlQueryURLEncoded" +
+                            "&client_metadata=$clientMetadataJwksInline"
+
+                    val resolution = resolver().resolveRequestUri(authRequest)
+                    resolution.assertIsInvalid<RequestValidationError.InvalidRedirectUri>()
+                }
+
+                test(genState())
+                test()
+            }
+
+        @Test
+        fun `resolution success with client id prefix redirect_uri, response mode direct_post and no response_uri`() =
+            runTest {
+                suspend fun test(state: String? = null) {
+                    val authRequest =
+                        "https://client.example.org/universal-link?" +
+                            "response_type=vp_token" +
+                            "&response_mode=direct_post" +
+                            "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                            "&nonce=n-0S6_WzA2Mj" +
+                            (state?.let { "&state=$it" } ?: "") +
+                            "&dcql_query=$dcqlQueryURLEncoded" +
+                            "&client_metadata=$clientMetadataJwksInline"
+
+                    val resolution = resolver().resolveRequestUri(authRequest)
+                    val resolvedRequestObject = resolution.assertIsSuccess()
+                    assertEquals(
+                        ResponseMode.DirectPost(URI.create("https://client.example.org/cb").toURL()),
+                        resolvedRequestObject.responseMode,
+                    )
+                }
+
+                test(genState())
+                test()
+            }
+
+        @Test
+        fun `resolution failure with client id prefix redirect_uri, response mode direct_post and response_uri mismatch`() =
+            runTest {
+                suspend fun test(state: String? = null) {
+                    val authRequest =
+                        "https://client.example.org/universal-link?" +
+                            "response_type=vp_token" +
+                            "&response_mode=direct_post" +
+                            "&client_id=redirect_uri%3Ahttps%3A%2F%2Fclient.example.org%2Fcb" +
+                            "&response_uri=https%3A%2F%2Fclient.example.org%2Fmismatch" +
+                            "&nonce=n-0S6_WzA2Mj" +
+                            (state?.let { "&state=$it" } ?: "") +
+                            "&dcql_query=$dcqlQueryURLEncoded" +
+                            "&client_metadata=$clientMetadataJwksInline"
+
+                    val resolution = resolver().resolveRequestUri(authRequest)
+                    resolution.assertIsInvalid<RequestValidationError.InvalidResponseUri>()
+                }
+
+                test(genState())
+                test()
             }
     }
 
