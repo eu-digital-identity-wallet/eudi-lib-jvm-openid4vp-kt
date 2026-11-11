@@ -353,7 +353,7 @@ private fun MockEngine(
     MockEngine { request ->
         assertEquals(HttpMethod.Post, request.method)
         assertEquals(requestUri, request.url.toURI())
-        assertEquals(listOf("application/oauth-authz-req+jwt", "application/jwt"), request.headers.getAll(HttpHeaders.Accept))
+        assertEquals(listOf("application/oauth-authz-req+jwt"), request.headers.getAll(HttpHeaders.Accept))
 
         val body = assertIs<FormDataContent>(request.body)
         val walletMetadata = Json.decodeFromString<JsonObject>(assertIs<String>(body.formData[OpenId4VPSpec.WALLET_METADATA]))

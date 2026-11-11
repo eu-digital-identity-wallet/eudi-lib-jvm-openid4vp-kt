@@ -189,7 +189,6 @@ private fun invalidJwt(cause: String): AuthorizationRequestException = RequestVa
 private fun unsupportedRequestUriMethod(m: RequestUriMethod): AuthorizationRequestException =
     RequestValidationError.UnsupportedRequestUriMethod(m).asException()
 
-private const val APPLICATION_JWT = "application/jwt"
 private const val APPLICATION_OAUTH_AUTHZ_REQ_JWT = "application/oauth-authz-req+jwt"
 
 private suspend fun HttpClient.getJAR(requestUri: URL): Jwt =
@@ -218,7 +217,6 @@ private suspend fun HttpClient.postForJAR(
 
 private fun HttpRequestBuilder.addAcceptContentTypeJwt() {
     accept(ContentType.parse(APPLICATION_OAUTH_AUTHZ_REQ_JWT))
-    accept(ContentType.parse(APPLICATION_JWT))
 }
 
 private const val CONTENT_TYPE_JWT = "JWT"
