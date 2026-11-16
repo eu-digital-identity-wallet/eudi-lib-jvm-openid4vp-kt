@@ -236,9 +236,25 @@ internal class RequestObjectValidator(
 
         fun requiredResponseUriAndNotProvidedRedirectUri(): URL {
             ensure(unvalidated.redirectUri == null) { RedirectUriMustNotBeProvided.asException() }
-            val uri = unvalidated.responseUri
-            ensureNotNull(uri) { MissingResponseUri.asException() }
-            return uri.asHttpsURL { InvalidResponseUri.asException() }.getOrThrow()
+            // Response URI can be omitted in case of RedirectURI
+            // and use clientId instead
+            val responseUri = unvalidated.responseUri?.asHttpsURL { InvalidResponseUri.asException() }?.getOrThrow()
+            return when (client) {
+                is AuthenticatedClient.RedirectUri -> {
+                    // Do not use java.net.URL.equals() to avoid DNS resolution
+                    ensure(responseUri == null || client.clientId.toString() == responseUri.toString()) {
+                        InvalidResponseUri.asException()
+                    }
+                    client.clientId
+                        .toString()
+                        .asHttpsURL { InvalidResponseUri.asException() }
+                        .getOrThrow()
+                }
+
+                else -> {
+                    ensureNotNull(responseUri) { MissingResponseUri.asException() }
+                }
+            }
         }
 
         val responseMode =
