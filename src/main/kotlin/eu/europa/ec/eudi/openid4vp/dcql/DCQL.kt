@@ -316,8 +316,11 @@ data class CredentialQuery(
         }
 
         private fun List<ClaimSet>.ensureValid(claims: List<ClaimsQuery>) {
-            val claimIds = claims.mapNotNull { it.id }
             require(this.isNotEmpty()) { "${OpenId4VPSpec.DCQL_CLAIM_SETS} cannot be empty" }
+            require(claims.all { it.id != null }) {
+                "Each claim must have an id when ${OpenId4VPSpec.DCQL_CLAIM_SETS} is present"
+            }
+            val claimIds = claims.mapNotNull { it.id }
             this.forEach { claimSet ->
                 claimSet.ensureKnownClaimIds(claimIds)
             }

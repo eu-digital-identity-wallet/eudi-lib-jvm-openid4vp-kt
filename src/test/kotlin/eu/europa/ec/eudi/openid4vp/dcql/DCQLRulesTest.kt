@@ -75,4 +75,25 @@ class DCQLRulesTest {
             // ok
         }
     }
+
+    @Test
+    fun whenClaimSetsIsPresentAndAClaimHasNoIdAnExceptionIsRaised() {
+        try {
+            Credentials(
+                CredentialQuery.sdJwtVc(
+                    QueryId("id1"),
+                    DCQLMetaSdJwtVcExtensions(vctValues = listOf("bar")),
+                    claims =
+                        listOf(
+                            ClaimsQuery.sdJwtVc(ClaimId("a"), ClaimPath.claim("a")),
+                            ClaimsQuery.sdJwtVc(path = ClaimPath.claim("b")),
+                        ),
+                    claimSets = listOf(ClaimSet(listOf(ClaimId("a")))),
+                ),
+            )
+            fail("claims must have an id when claimSets is present")
+        } catch (_: IllegalArgumentException) {
+            // ok
+        }
+    }
 }
