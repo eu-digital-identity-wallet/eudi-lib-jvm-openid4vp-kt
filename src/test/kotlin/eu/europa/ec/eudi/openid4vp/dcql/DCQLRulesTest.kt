@@ -16,6 +16,8 @@
 package eu.europa.ec.eudi.openid4vp.dcql
 
 import kotlin.test.Test
+import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.fail
 
 class DCQLRulesTest {
@@ -78,22 +80,21 @@ class DCQLRulesTest {
 
     @Test
     fun whenClaimSetsIsPresentAndAClaimHasNoIdAnExceptionIsRaised() {
-        try {
-            Credentials(
-                CredentialQuery.sdJwtVc(
-                    QueryId("id1"),
-                    DCQLMetaSdJwtVcExtensions(vctValues = listOf("bar")),
-                    claims =
-                        listOf(
-                            ClaimsQuery.sdJwtVc(ClaimId("a"), ClaimPath.claim("a")),
-                            ClaimsQuery.sdJwtVc(path = ClaimPath.claim("b")),
-                        ),
-                    claimSets = listOf(ClaimSet(listOf(ClaimId("a")))),
-                ),
-            )
-            fail("claims must have an id when claimSets is present")
-        } catch (_: IllegalArgumentException) {
-            // ok
-        }
+        val exception =
+            assertFailsWith<IllegalArgumentException> {
+                Credentials(
+                    CredentialQuery.sdJwtVc(
+                        QueryId("id1"),
+                        DCQLMetaSdJwtVcExtensions(vctValues = listOf("bar")),
+                        claims =
+                            listOf(
+                                ClaimsQuery.sdJwtVc(ClaimId("a"), ClaimPath.claim("a")),
+                                ClaimsQuery.sdJwtVc(path = ClaimPath.claim("b")),
+                            ),
+                        claimSets = listOf(ClaimSet(listOf(ClaimId("a")))),
+                    ),
+                )
+            }
+        assertEquals("Each claim must have an id when claim_sets is present", exception.message)
     }
 }
