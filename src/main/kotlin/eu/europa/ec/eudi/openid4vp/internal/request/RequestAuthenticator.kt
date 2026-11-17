@@ -518,11 +518,15 @@ private fun UnvalidatedRequestObject.extendWithHeaderAttributes(header: JWSHeade
     header
         ?.getCustomParam(OpenId4VPSpec.VERIFIER_INFO)
         ?.let { verifierInfo ->
-            ensure(verifierInfo is JsonObject) {
-                error("Invalid verifier_info. Expected JsonObject but was ${verifierInfo::class}")
-            }
-            val verifierInfo = jsonSupport.decodeFromString<VerifierInfoTO>(JSONObjectUtils.toJSONString(verifierInfo))
-            this.copy(verifierInfo = verifierInfo)
+            val verifierInfoTO =
+                runCatchingCancellable {
+                    jsonSupport.decodeFromString<VerifierInfoTO>(Gson().toJson(verifierInfo))
+                }.getOrElse { error ->
+                    throw RequestValidationError
+                        .InvalidVerifierInfo("Invalid ${OpenId4VPSpec.VERIFIER_INFO} in JWS header. Cause: ${error.message}")
+                        .asException()
+                }
+            this.copy(verifierInfo = verifierInfoTO)
         } ?: this
 
 internal data class VerifierAttestationClaims(
