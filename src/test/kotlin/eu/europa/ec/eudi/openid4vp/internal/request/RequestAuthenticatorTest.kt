@@ -26,6 +26,11 @@ import eu.europa.ec.eudi.openid4vp.internal.AbsoluteDIDUrl
 import eu.europa.ec.eudi.openid4vp.internal.DID
 import eu.europa.ec.eudi.openid4vp.internal.JwsJson
 import kotlinx.coroutines.test.runTest
+import kotlinx.serialization.json.add
+import kotlinx.serialization.json.addJsonObject
+import kotlinx.serialization.json.buildJsonArray
+import kotlinx.serialization.json.put
+import kotlinx.serialization.json.putJsonArray
 import org.junit.jupiter.api.DisplayName
 import org.junit.jupiter.api.Nested
 import org.junit.jupiter.api.assertThrows
@@ -604,6 +609,71 @@ class RequestAuthenticatorOverDCApiTest {
 
                 assertNotNull(signature1.protected)
                 assertNotNull(signature2.protected)
+            }
+    }
+
+    @DisplayName("when handling a multi-signed request with verifier_info in the JWS header")
+    @Nested
+    inner class MultiSignedRequestVerifierInfoTest {
+        private val requestAuthenticator = RequestAuthenticator(cfg)
+
+        private fun multiSignedRequest(verifierInfo: Any?): ReceivedRequest.MultiSigned {
+            val didSigner = didSigner(didAlgAndKey)
+            val signer =
+                SchemeSigner(didSigner.alg, didSigner.key) {
+                    didSigner.headerCustomization(this)
+                    verifierInfo?.let { customParam(OpenId4VPSpec.VERIFIER_INFO, it) }
+                }
+            return UnvalidatedRequestObject(expectedOrigins = listOf("test_origin")).multiSigned(listOf(signer))
+        }
+
+        @Test
+        fun `if verifier_info is missing request object has no verifier_info`() =
+            runTest {
+                val request = multiSignedRequest(verifierInfo = null)
+                val authenticatedRequest = requestAuthenticator.authenticateRequestOverDCApi("test_origin", request)
+                assertNull(authenticatedRequest.requestObject.verifierInfo)
+            }
+
+        @Test
+        fun `if verifier_info is present it is added to the request object`() =
+            runTest {
+                val verifierInfo =
+                    listOf(
+                        mapOf(
+                            OpenId4VPSpec.VERIFIER_INFO_FORMAT to OpenId4VPSpec.VERIFIER_INFO_FORMAT_JWT,
+                            OpenId4VPSpec.VERIFIER_INFO_DATA to "eyJhbGciOiJFUzI1NiJ9.e30.c2lnbmF0dXJl",
+                            OpenId4VPSpec.VERIFIER_INFO_CREDENTIAL_IDS to listOf("pid"),
+                        ),
+                    )
+                val request = multiSignedRequest(verifierInfo)
+                val authenticatedRequest = requestAuthenticator.authenticateRequestOverDCApi("test_origin", request)
+
+                val expected =
+                    buildJsonArray {
+                        addJsonObject {
+                            put(OpenId4VPSpec.VERIFIER_INFO_FORMAT, OpenId4VPSpec.VERIFIER_INFO_FORMAT_JWT)
+                            put(OpenId4VPSpec.VERIFIER_INFO_DATA, "eyJhbGciOiJFUzI1NiJ9.e30.c2lnbmF0dXJl")
+                            putJsonArray(OpenId4VPSpec.VERIFIER_INFO_CREDENTIAL_IDS) { add("pid") }
+                        }
+                    }
+                assertEquals(expected, authenticatedRequest.requestObject.verifierInfo?.value)
+            }
+
+        @Test
+        fun `if verifier_info is not an array of objects fail with InvalidVerifierInfo`() =
+            runTest {
+                listOf<Any>(
+                    mapOf(OpenId4VPSpec.VERIFIER_INFO_FORMAT to OpenId4VPSpec.VERIFIER_INFO_FORMAT_JWT),
+                    emptyList<Any>(),
+                    listOf("not an object"),
+                    "not an array",
+                ).forEach { invalidVerifierInfo ->
+                    val request = multiSignedRequest(invalidVerifierInfo)
+                    assertFailsWithError<RequestValidationError.InvalidVerifierInfo> {
+                        requestAuthenticator.authenticateRequestOverDCApi("test_origin", request)
+                    }
+                }
             }
     }
 }
