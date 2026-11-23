@@ -507,6 +507,8 @@ private class JarJwtSignatureVerifier(
     }
 }
 
+private val gson: Gson = Gson()
+
 private fun invalidPrefix(cause: String): AuthorizationRequestException = RequestValidationError.InvalidClientIdPrefix(cause).asException()
 
 private fun invalidJarJwt(cause: String): AuthorizationRequestException = RequestValidationError.InvalidJarJwt(cause).asException()
@@ -520,7 +522,7 @@ private fun UnvalidatedRequestObject.extendWithHeaderAttributes(header: JWSHeade
         ?.let { verifierInfo ->
             val verifierInfoTO =
                 runCatchingCancellable {
-                    jsonSupport.decodeFromString<VerifierInfoTO>(Gson().toJson(verifierInfo))
+                    jsonSupport.decodeFromString<VerifierInfoTO>(gson.toJson(verifierInfo))
                 }.getOrElse { error ->
                     throw RequestValidationError
                         .InvalidVerifierInfo("Invalid ${OpenId4VPSpec.VERIFIER_INFO} in JWS header. Cause: ${error.message}")
@@ -554,7 +556,7 @@ private fun SignedJWT.verifierAttestationClaims(): VerifierAttestationClaims =
                     val jwk =
                         runCatchingCancellable {
                             val jwkObj = requireNotNull(cnf["jwk"]) { "Missing jwk" }
-                            JWK.parse(Gson().toJson(jwkObj))
+                            JWK.parse(gson.toJson(jwkObj))
                         }.getOrNull()
                     requireNotNull(jwk) { "Missing jwk" }
                     require(!jwk.isPrivate) { "Not a public JWK" }
