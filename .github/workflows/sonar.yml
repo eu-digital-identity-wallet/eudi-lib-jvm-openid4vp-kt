@@ -13,9 +13,5 @@ jobs:
     permissions:
       contents: read
     uses: eu-digital-identity-wallet/eudi-infra-ci/.github/workflows/sast_action_libs_kotlin.yml@main
-    with:
-      java_binaries: 'build/classes/kotlin/main'
-      kotlin_binaries: 'build/classes/kotlin/main'
-      extra_sonar_args: '-Dsonar.kotlin.multiplatform.reportPaths=build/reports/kover/report.xml'
     secrets:
       SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
